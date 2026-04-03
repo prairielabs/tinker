@@ -1,0 +1,154 @@
+////////////////////////////////////////////////////////////
+PROGRAM EXPORT — HELLO WORLD (PRIMITIVE)
+TARGET: Tinker / Prairie-compatible
+AUTHOR: Origin (cal)
+ADMIN KEY: recurse
+MODEL: GPT-5.2 (recommended)
+DISPLAY: 420 x 720 px terminal
+MODE: Single-Screen Funnel
+////////////////////////////////////////////////////////////
+
+
+==============================
+PROGRAM NAME
+==============================
+Hello World
+
+
+==============================
+INTENT
+==============================
+A minimal, public-facing primitive.
+All user prompts, regardless of content, are funneled into a single,
+persistent screen. The screen is deliberately sparse and editable,
+serving as the canonical surface for future iteration.
+
+
+==============================
+DISPLAY SPEC
+==============================
+Viewport:
+- Width: 420 px
+- Height: 720 px
+- Scroll: disabled
+- Panels: 1 (single terminal screen)
+- Font: monospace
+- Background: solid (black or near-black recommended)
+- Text color: neutral (white / light gray)
+
+Behavior:
+- Screen clears on each new prompt
+- No multi-pane routing
+- No hidden buffers
+- No modal overlays
+
+
+==============================
+CORE RULES
+==============================
+
+RULE 1 — Funnel
+All user input, regardless of origin, intent, or structure,
+routes to the same screen.
+
+RULE 2 — Single Output Surface
+There is exactly one render target.
+No secondary logs, sidebars, or debug panes.
+
+RULE 3 — Clear-on-Receive
+Each new prompt triggers a full screen clear
+before rendering output.
+
+RULE 4 — Deterministic Framing
+Output always appears in the same fixed layout.
+No adaptive resizing, no dynamic panels.
+
+RULE 5 — Editable Surface
+The output screen is intentionally plain and unopinionated,
+so it can be manually edited, extended, or replaced later.
+
+
+==============================
+SCREEN TEMPLATE (EDITABLE)
+==============================
+
+from 77 - - -  to 96 - - -
+
+--------------------------------------------------------------------------------
+
+
+
+
+
+            _   _      _ _        __        __         _     _ _ 
+            | | | | ___| | | ___   \ \      / /__  _ __| | __| | |
+            | |_| |/ _ \ | |/ _ \   \ \ /\ / / _ \| '__| |/ _` | |
+            |  _  |  __/ | | (_) |   \ V  V / (_) | |  | | (_| |_|
+            |_| |_|\___|_|_|\___/     \_/\_/ \___/|_|  |_|\__,_(_)
+
+
+
+
+
+- CS WAS HERE
+
+--------------------------------------------------------------------------------
+
+
+NOTES:
+- This block is the ONLY rendered content.
+- You are expected to modify this freely.
+- No logic elsewhere should format or decorate output.
+
+
+==============================
+EXECUTION FLOW
+==============================
+
+1. Receive user prompt
+2. Clear terminal screen
+3. Inject prompt into {{USER_PROMPT}}
+4. Render screen template
+5. Halt (no recursion, no follow-ups)
+
+
+==============================
+MODEL DIRECTIVE
+==============================
+
+- Use GPT-5.2
+- Do not branch responses
+- Do not create additional UI elements
+- Do not preserve prior turns
+- Treat each prompt as first contact
+- Prioritize clarity over cleverness
+
+
+==============================
+EXTENSION POINTS (NON-ACTIVE)
+==============================
+
+- Replace OUTPUT text
+- Add state later
+- Add interpretation layer later
+- Add Prairie Engine hooks later
+- Add graphics later
+
+None of the above are active in Hello World.
+
+
+==============================
+CANONICAL STATUS
+==============================
+
+This program is intentionally trivial.
+Its purpose is to establish:
+- a public runnable artifact
+- a fixed semantic surface
+- a known-good funnel primitive
+
+Everything else builds on this.
+
+
+END EXPORT
+////////////////////////////////////////////////////////////

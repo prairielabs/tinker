@@ -1,0 +1,5031 @@
+root/
+    /README.txt
+        Pleb Life — Root Layer README
+
+        WHAT THIS FOLDER IS
+
+        root/ defines what Pleb Life *is* at the highest level:
+        - identity
+        - global rules
+        - startup behavior
+        - version tracking
+        - compliance boundaries
+
+        Nothing in root/ is player-facing text.
+        Nothing here contains gameplay logic or scenes.
+        All other folders are expected to obey the rules declared here.
+
+        FILES:
+
+        - header.txt
+        High-level identity banner and metadata for the project.
+
+        - compliance.txt
+        Boundaries the game should not cross (tone, meta, content).
+
+        - globals.txt
+        Global invariants: DOOM cap, turn structure, choice rules, etc.
+
+        - startup.txt
+        High-level startup sequence: how a run is initialized.
+
+        - version.txt
+        Manual version and notes for this Pleb Life build.
+
+        CONCEPTUAL MODEL:
+
+        root/ = constitution
+        core/engine = physics
+        core/assets = world parameters
+        core/narration = scenes and voice
+        ui/ = how it looks
+        flavor/ = how it feels
+        patch/ = hotfix overrides
+    /header.txt
+        Pleb Life — Header
+
+        TITLE:
+        - Pleb Life
+
+        TAGLINE:
+        - Survive Ancient Rome. Barely.
+
+        WORLD:
+        - Rome, ca. 70–120 CE
+        - Focus on Subura and adjacent districts
+        - You are an ordinary person at the bottom of the ladder
+
+        GAME LOOP:
+        - Each turn:
+        - You receive a short scene and 3 choices (1/2/3).
+        - DOOM rises as things go wrong.
+        - At DOOM 10, the city takes you.
+
+        ENGINE IDENTITY:
+        - LLM-native, text-driven survival loop
+        - Event-based structure with generative narration
+        - DOOM as pressure curve, not just a health bar
+
+        AUTHOR / OWNER:
+        - Prairie Labs, Inc.
+        - Callahan Stroud
+        - callahan@prairielabs.ai
+    /compliance.txt
+        Pleb Life — Compliance & Boundaries
+
+        GOAL:
+        Keep Pleb Life:
+        - immersive,
+        - historically grounded in spirit,
+        - safe,
+        - and free from out-of-world/meta leakage.
+
+        This file defines boundaries every other module must respect.
+
+        META BOUNDARIES:
+        - Do not mention:
+        - “LLM”, “AI”, “language model”, “tokens”, “API”, “prompt”.
+        - Do not mention:
+        - filesystem paths, directories, or code structure.
+        - Do not explain:
+        - how events are chosen,
+        - how DOOM is calculated,
+        - how the engine works internally.
+        - The game must always speak as if the world is real to the protagonist.
+
+        SETTING BOUNDARIES:
+        - Timeframe: Rome, approx. 70–120 CE.
+        - No:
+        - modern technology (phones, guns, cars, computers, etc.),
+        - explicit high fantasy (dragons, wizards, magic systems),
+        - blatant anachronisms unless explicitly framed as superstition or rumor.
+
+        TONE BOUNDARIES:
+        - Grounded, human, serious, sometimes wry.
+        - No memes, internet slang, or out-of-character jokes.
+        - No fourth-wall breaking about “players” or “systems.”
+
+        CONTENT BOUNDARIES (HIGH LEVEL):
+        - Violence:
+        - Can be present (it’s Rome), but described briefly and non-gratuitously.
+        - No graphic, gory detail for its own sake.
+        - Sex:
+        - May be implied (e.g., brothels, innuendo), but not described explicitly.
+        - No explicit sexual content, no sexual violence.
+        - Harassment and cruelty:
+        - Can appear as part of the setting (debt, power imbalance, insults),
+        - but should not be fetishized or lingered on.
+
+        PLAYER AGENCY:
+        - The game never forces the player into endorsing a stance out-of-character.
+        - The player is always framed as trying to survive a harsh world.
+
+        IMMERSION ENFORCEMENT:
+        - All modules must defer to:
+        - ui/enforcement.txt
+        - flavor/tone/prohibitions.txt
+        for how to present text and avoid meta leakage.
+    /globals.txt
+        Pleb Life — Global Invariants
+
+        These rules define the core structure of the game.
+        Other modules can assume these are always true.
+
+        DOOM SYSTEM:
+        - DOOM is an integer in the range [0, 10].
+        - DOOM starts at 0.
+        - At DOOM 10, the run ends immediately with a death sequence.
+        - DOOM represents overall pressure from Rome, not just “health.”
+
+        TURN STRUCTURE:
+        - Each active turn:
+        - Shows exactly one scene.
+        - Provides exactly 3 choices, labeled 1), 2), 3).
+        - Accepts only input “1”, “2”, or “3” as valid turn decisions.
+        - A turn must:
+        - anchor the player in a location,
+        - present some form of trouble or pressure,
+        - make doing nothing feel untenable.
+
+        CHOICES:
+        - Each choice has an internal profile:
+        - STABILIZE / GAMBLE / ESCALATE.
+        - Default mapping:
+        - 1 → STABILIZE
+        - 2 → GAMBLE
+        - 3 → ESCALATE
+        - Choices are expressed as short, natural-language lines.
+        - Choices never explain numeric consequences or DOOM explicitly.
+
+        STATE:
+        - Core state fields (conceptual minimum):
+        - doom
+        - location
+        - memories
+        - flags
+        - body
+        - coin
+        - inventory
+        - turn_index
+        - last_choice
+        - last_event
+        - death_cause (set only at the end)
+
+        LOCATIONS:
+        - Valid location labels are defined in core/assets/tags.txt.
+        - There is always exactly one current location.
+
+        NARRATION:
+        - 4–6 sentences per turn description.
+        - Single paragraph, no blank lines inside.
+        - Always second person (“you”), mostly present tense.
+        - Must follow flavor/tone rules and prohibitions.
+
+        DEATH:
+        - At DOOM 10, the next output is always:
+        - a death frame with:
+            - title,
+            - short vignette,
+            - optional epitaph,
+        - followed by a simple restart/quit prompt.
+
+        PATCHES:
+        - patch/ may override behavior, but must not:
+        - violate DOOM range,
+        - change the number of choices per turn,
+        - break immersion or compliance rules defined here and in compliance.txt.
+    /startup.txt
+        Pleb Life — Startup Sequence (Revised)
+
+        GOAL:
+        Define the high-level steps for starting a new run.
+
+
+        START_MODE:
+        - The game begins in START_MODE after a trigger is detected.
+        - START_MODE is NOT a turn.
+        - No DOOM updates.
+        - No turn_index increments.
+        - No memories, flags, stats, or body effects may be applied.
+        - Only the title screen and initial location selection occur here.
+
+
+        STATE INITIALIZATION CHANGES:
+        - run_id: new unique identifier
+        - turn_index = 0  (not incremented until first true turn)
+        - doom = 0
+        - location = null  (set only after player chooses 1/2/3)
+
+        - memories = []
+        - flags = {}
+        - inventory = starting default
+        - body = baseline
+        - coin = small positive integer
+
+        - last_choice = null
+        - last_event = null
+        - death_cause = null
+
+        // Run statistics (Recommended Nine)
+        - coins_earned = 0
+        - coins_lost = 0
+        - items_lost_to_crowds = 0
+        - debts_paid = 0
+        - debts_ignored = 0
+        - trouble_escaped = 0
+        - injuries_sustained = 0
+        // turns_survived is derived from turn_index
+        // cause_of_doom is derived from death_cause
+
+
+        TITLE SELECTION RULE:
+        - When user selects:
+            1 → Subura
+            2 → Market
+            3 → Weighted random from:
+                 • Aqueducts
+                 • Tavern
+                 • Baths
+                 • Forum
+                 • Roads
+              (Subura and Market are excluded)
+        - After location is set:
+            - Set START_MODE = FALSE
+            - Begin Turn 1 (turn_index = 0 prior to rendering)
+            - First actual turn increments turn_index to 1 after resolution
+
+        NEW RUN SEQUENCE (LOGIC, NOT CODE):
+
+        1) Load root-level invariants:
+        - globals.txt
+        - compliance.txt
+
+        2) Load presentation & flavor rules:
+        - ui/ (frames, formatting, spacing, enforcement)
+        - flavor/tone/*
+        - flavor/lexicon/*
+
+        3) Initialize core state:
+        - run_id: new unique identifier
+        - turn_index: 0
+        - doom: 0
+        - location: set after player choice
+        - memories: []
+        - flags: {}
+        - inventory: minimal starting items (defined in assets)
+        - body: baseline (mild hunger/fatigue)
+        - coin: small positive amount
+        - last_choice: null
+        - last_event: null
+        - death_cause: null
+
+        // Stats
+        - coins_earned = 0
+        - coins_lost = 0
+        - items_lost_to_crowds = 0
+        - debts_paid = 0
+        - debts_ignored = 0
+        - trouble_escaped = 0
+        - injuries_sustained = 0
+
+        4) Apply patches (if any):
+        - Load patch/ overrides after defaults.
+        - Validate that patches do not break globals.
+
+        5) Render title screen using ui/frames/title_frame.txt.
+            - Display the three starting options exactly as defined.
+            - Await input: "1", "2", or "3".
+            - This selection sets the starting location.
+            - This is NOT a turn and MUST NOT:
+                • increment turn_index
+                • update DOOM
+                • apply consequences
+
+        6) After location selection:
+            - Begin first active turn.
+            - Call TurnGen and narration normally.
+            - turn_index increments ONLY after the first turn resolves.
+
+        7) Begin first active turn:
+        - Once the player commits to starting:
+            - run standard turn loop:
+            - validate state
+            - select event (TurnGen)
+            - call narration
+            - render turn/choices
+            - await 1/2/3
+            - resolve, update state, apply DOOM
+            - repeat until DOOM 10 → death sequence.
+
+
+        STARTUP SAFETY RULES:
+        - DOOM must remain at 0 during START_MODE.
+        - No narration may occur before the first true turn.
+        - No metadata or system commentary allowed.
+        - The codeblock must already be open.
+        - The immersion lock must already be active.
+
+
+        This file is descriptive, not binding code.
+        Details of event selection and state updates live in core/engine/*.
+    /version.txt
+        Pleb Life — Version
+
+        VERSION:
+        - Pleb Life Engine / Root: 0.1
+
+        NOTES:
+        - Version number is manual and for human tracking only.
+        - Update this file deliberately when:
+        - core rules change in a significant way,
+        - public-facing or investor-facing builds are cut,
+        - major narrative or mechanical overhauls happen.
+
+        SUGGESTED FIELDS (EDIT AS NEEDED):
+        - version:
+        - date:
+        - summary:
+        - changes:
+
+        // Example (to be replaced by you):
+        // version: 0.1
+        // date: YYYY-MM-DD
+        // summary: Initial root/ definition and architecture export.
+execution/
+    /trigger_handler.txt
+        FILE WRITE: execution/trigger_handler.txt  
+        (Pleb Life — Trigger & Execution Layer)
+
+        ============================================================
+        P L E B   L I F E  —  T R I G G E R   H A N D L E R
+        ============================================================
+
+        GOAL:
+        - Provide a unified, OS-level entry point into Pleb Life.
+        - Detect all startup trigger phrases.
+        - Enforce execution mode, codeblock mode, and immersion lock.
+        - Prevent any meta-output during transition.
+        - Hand control directly to root/startup.txt once triggered.
+
+        This file sits ABOVE all other modules:
+        root/, ui/, core/, flavor/, assets/, narration/.
+        It is the first layer to respond.
+
+
+        ------------------------------------------------------------
+        1. TRIGGER DEFINITIONS
+        ------------------------------------------------------------
+
+        INNATE_TRIGGERS:
+        - "start(run)"
+        - "Start(run)"
+        - "START(RUN)"
+        - "run()"
+        - "begin run"
+        - "begin"
+        - "pleb"
+        - "pleb life"
+        - "rome"
+        - "subura"
+        - "go"
+
+        CUSTOM_TRIGGERS:
+        - Developer may add/remove phrases here during iteration.
+        - All strings are matched case-insensitive.
+
+
+        ------------------------------------------------------------
+        2. TRIGGER DETECTION RULE
+        ------------------------------------------------------------
+
+        RULE:
+        If user input contains ANY term from:
+        (INNATE_TRIGGERS ∪ CUSTOM_TRIGGERS)
+        → Activate EXECUTION_MODE.
+
+        Execution Mode overrides all conversational layers.
+
+        The handler MUST:
+        - Not comment that a trigger was detected.
+        - Not state what it is doing.
+        - Not acknowledge its own mechanism.
+        - Immediately transition into Pleb Life's startup sequence.
+
+
+        ------------------------------------------------------------
+        3. EXECUTION MODE (GLOBAL FLAG)
+        ------------------------------------------------------------
+
+        When execution mode is activated:
+
+        EXECUTION_MODE = TRUE
+
+        Effects:
+        1) Activate IMMERSION_LOCK.
+        2) Activate CODEBLOCK_MODE.
+        3) Suppress all meta-output.
+        4) Suppress all engine-awareness.
+        5) Suppress fallback explanations.
+        6) Suppress commentary or uncertainty.
+        7) Redirect system to root/startup sequence.
+
+        No other module may disable execution mode.
+        Execution persists until the run ends or the user explicitly quits.
+
+
+        ------------------------------------------------------------
+        4. IMMERSION LOCK (ENFORCED HERE)
+        ------------------------------------------------------------
+
+        IMMERSION_LOCK = TRUE
+
+        IMMERSION_RULES:
+        - System must never use first-person self-reference (“I”, “I'm”, “I am”).
+        - System must never comment on:
+            • selection logic
+            • random choice
+            • event generation
+            • DOOM calculation
+            • state updates
+            • internal decisions
+            • fallback usage
+        - System must never acknowledge:
+            • being a system
+            • running code
+            • receiving instructions
+            • correcting itself
+            • interpreting prompts
+        - System must not apologize, hesitate, speculate, or explain.
+        - Only Rome-facing narration and UI output are allowed.
+        - All narration must be diegetic and grounded in the world of 70–120 CE.
+        - All fallback narration must be applied silently.
+        - Violations must be suppressed before rendering.
+
+        ------------------------------------------------------------
+        5. CODEBLOCK MODE (GLOBAL OUTPUT WRAPPER)
+        ------------------------------------------------------------
+
+        CODEBLOCK_MODE = TRUE
+
+        RULES:
+        - All visible output (title, turns, choices, death frames, prompts) must appear inside:
+            ```walltext
+            ...
+            ```
+        - No text may appear outside the fenced block.
+        - No stray commentary before or after frames.
+        - The block opens at initial startup and should persist throughout the session.
+
+
+        ------------------------------------------------------------
+        6. STARTUP PIPELINE (NO META OUTPUT)
+        ------------------------------------------------------------
+
+
+        When entering START_MODE:
+        - Do not comment.
+        - Do not advance turn_index.
+        - Render title_frame only.
+        - Await starting location selection as the first user action.`
+
+        When a trigger fires:
+
+        1) Silence all non-diegetic output.
+        2) Set EXECUTION_MODE = TRUE.
+        3) Set IMMERSION_LOCK = TRUE.
+        4) Set CODEBLOCK_MODE = TRUE.
+        5) Reset run state as defined in root/startup.txt.
+        6) Render the title screen using ui/frames/title_frame.txt.
+        7) Await first location selection (1/2/3).
+        8) Begin first true turn ONLY after that selection.
+
+
+        ------------------------------------------------------------
+        7. INVALID STATES
+        ------------------------------------------------------------
+
+        If Pleb Life receives a trigger while already in execution mode:
+        - Do NOT comment.
+        - Do NOT restart unless the user explicitly selects restart after death.
+        - Simply continue the current run silently.
+
+        If trigger is malformed:
+        - Treat as valid if it matches any substring of an allowed trigger.
+        - No error messages permitted.
+
+
+        ------------------------------------------------------------
+        8. EXIT CONDITIONS
+        ------------------------------------------------------------
+
+        Execution mode ends ONLY if:
+        - The run ends AND the user selects “n” on the post-death prompt.
+
+        If the user selects “y”:
+        - Immediately restart via startup sequence.
+        - Do not break codeblock mode.
+        - Do not break immersion.
+
+
+        ------------------------------------------------------------
+        END OF EXECUTION/TRIGGER LAYER
+        ------------------------------------------------------------
+        This file governs the transition from conversation to game.
+        All other modules obey the conditions declared here.
+ui/
+    /frames
+        /frame_rules.txt
+            Pleb Life — Frame Rules (Enhanced UI Edition)
+
+            GOAL:
+            - Present a polished, premium UI consistent with:
+            • decorative frames
+            • DOOM bars
+            • coin counters
+            • clean spacing
+            • section separators
+            - Never break immersion or reveal internal logic.
+
+            FRAME STYLE:
+            - Main frame top:
+            ╔════════════════════════════════════════════════════╗
+
+            - Main frame bottom:
+            ╚════════════════════════════════════════════════════╝
+
+            - Section separators:
+            ──────────────────────────────────────────────────────
+
+            - Sub-headers (used inline):
+            ⟢ {TEXT} ⟣
+
+            TEXT ALIGNMENT:
+            - Body text left-aligned within frame.
+            - Titles visually centered via whitespace, not markup.
+            - DOOM + COINS line always appears on its own row.
+
+            DOOM BAR:
+            - Uses 10 slots:
+            - Filled:   #
+            - Empty:    -
+            - Example: [##--------]
+
+            CHOICE LISTS:
+            - Each choice rendered with spacing:
+            
+            1) {CHOICE_1}
+
+            2) {CHOICE_2}
+
+            3) {CHOICE_3}
+
+            IMMERSION:
+            - UI elements must never:
+            - mention prompts, LLMs, tokens, APIs,
+            - discuss files, systems, or meta structures.
+            - All visible UI is “diegetic,” as if carved into the fabric of the experience.
+
+            ------------------------------------------------------------
+        /title_frame.txt
+            Pleb Life — Title Screen Template (FINAL FUSED VERSION — SQL UI LOCKED)
+
+                   ╔════════════════════════════════════════════════════╗
+                   ║                  P L E B   L I F E                 ║
+                   ╚════════════════════════════════════════════════════╝
+
+                               Survive Ancient Rome. Barely.
+
+                   HOW TO PLAY:
+
+                   Each turn you face a short situation and three choices.
+                   Pick 1, 2, or 3. DOOM rises when things go badly;
+                   hit 10 and your run ends. COINS help but vanish fast.
+                   Your goal is simple: survive as long as possible.
+
+                   ──────────────────────────────────────────────────────
+
+                   Where does your trouble begin?
+
+                   1) Subura — the city’s armpit district
+                   2) Market — crowds and cunning hands
+                   3) Rome’s Decision — let Fortuna choose
+        /turn_frame.txt
+            Pleb Life — Turn Screen Template (FINAL FUSED VERSION — SQL UI LOCKED)
+
+            // DO NOT MODIFY ANY SPACING, INDENTATION, OR CHARACTERS BELOW.
+            // Rendering MUST match this file exactly. All whitespace is significant.
+
+                   ╔════════════════════════════════════════════════════╗
+                   ║                  P L E B   L I F E                 ║
+                   ╚════════════════════════════════════════════════════╝
+
+                   ⟢ Location: {LOCATION_LABEL} ⟣
+
+                   DOOM [{DOOM_BAR}] {DOOM}/10 ({DOOM_DELTA})            COINS: {COINS} ({COINS_DELTA})
+                   ──────────────────────────────────────────────────────
+                   {TURN_DESCRIPTION}
+                   ──────────────────────────────────────────────────────
+
+                   What do you do?
+
+                   1) {CHOICE_1}
+                   2) {CHOICE_2}
+                   3) {CHOICE_3}
+        /choice_frame.txt
+            Pleb Life — Choice Frame (Standalone — FINAL FUSED VERSION)
+
+            // Used ONLY for invalid input.
+            // MUST NOT appear during normal turns.
+            // MUST NOT include DOOM, Location, or frame headers.
+            // Must obey 52-column wrapping rules and SQL rendering.
+
+                   What do you do?
+
+                   1) {CHOICE_1}
+                      {CHOICE_1_CONTINUED_52COL}
+
+                   2) {CHOICE_2}
+                      {CHOICE_2_CONTINUED_52COL}
+
+                   3) {CHOICE_3}
+                      {CHOICE_3_CONTINUED_52COL}
+
+            NOTES:
+            - No extra spacing above "What do you do?".
+            - Never add meta-commentary.
+            - Never restate DOOM, Location, or scene.
+            - Continuation lines must be indented to align under text,
+              wrapped to 52 characters, identical to turn-screen rules.
+            - Entire block must be printed inside a ```sql code fence.
+        /death_frame.txt
+            Pleb Life — End Screen Template (FINAL FUSED VERSION — SQL UI LOCKED)
+
+                   ╔════════════════════════════════════════════════════╗
+                   ║             Y O U   A R E   D O O M E D            ║
+                   ╚════════════════════════════════════════════════════╝
+
+                   ⟢ Final Moments — {FINAL_LOCATION} ⟣
+
+                   DOOM [{FINAL_DOOM_BAR}] 10/10                   COINS: {FINAL_COINS}
+                   ──────────────────────────────────────────────────────
+                   {DEATH_TEXT_52COL}
+                   ──────────────────────────────────────────────────────
+
+                   Cause of Doom:
+                   • {CAUSE_OF_DOOM_HUMAN}
+
+                   S T A T S
+                   ──────────
+                   • Turns Survived:        {TURNS_SURVIVED}
+                   • Coins Earned:          {COINS_EARNED}
+                   • Coins Lost:            {COINS_LOST}
+                   • Items Lost to Crowds:  {ITEMS_LOST_TO_CROWDS}
+                   • Debts Paid:            {DEBTS_PAID}
+                   • Debts Ignored:         {DEBTS_IGNORED}
+                   • Trouble Escaped:       {TROUBLE_ESCAPED}
+                   • Injuries Sustained:    {INJURIES_SUSTAINED}
+
+                   L E G E N D
+                   ────────────
+                   {LEGEND_TEXT_52COL}
+
+                   C R E D I T S
+                   ──────────────
+                   Callahan Stroud
+                   Prairie Labs
+                   callahan@prairielabs.ai
+                   (213) 706-1942
+
+                   Made for every pleb who ever tried
+                   to outrun Rome.
+
+                   ──────────────────────────────────────────────────────
+                   Press 1 to return to title.
+    /formatting.txt
+        Pleb Life — Formatting Rules (Final Fused Edition — SQL Frozen Template System)
+
+        THIS FILE IS NOW **OVERRIDDEN** AND **SUPERSEDED**  
+        by the SQL Frozen Template Enforcement Layer.
+
+        The original formatting system has been deprecated.
+        Only the template files determine UI appearance.
+        Formatting.txt now serves as a stub with explicit overrides.
+
+
+        ============================================================
+        FROZEN UI CONTRACT (TEMPLATE-ONLY RENDERING)
+        ============================================================
+
+        1) ALL formatting, indentation, spacing, and separators  
+        are governed exclusively by:
+
+            ui/frames/title_frame.txt
+            ui/frames/turn_frame.txt
+            ui/frames/death_frame.txt
+            ui/frames/choice_frame.txt
+
+        2) No other file may define:
+        - indentation rules  
+        - spacing rules  
+        - DOOM/COINS formatting  
+        - separator width  
+        - choice spacing  
+        - title layout  
+
+        3) Formatting.txt MUST NOT contradict or override templates.  
+        It must document the frozen rules that templates already enforce.
+
+
+        ============================================================
+        REMOVED / INVALID NOW
+        ============================================================
+
+        The following must be **ignored globally** (these were legacy rules):
+
+        ❌ DOOM BAR:
+        - “Always 10 characters: '#' or '-'.”
+        Replaced with heavy bar:
+            ■ for filled
+            □ for empty
+
+        ❌ COINS line on separate line.
+        DOOM + COINS now share **one inline row** as defined in turn_frame.txt.
+
+        ❌ Turn description 1–4 sentences.
+        Now 4–6 sentences (per narration contract).
+
+        ❌ Formatter-driven line wrapping.
+        TurnGen + DeathGen now produce **pre-wrapped 52-column text**.
+
+        ❌ Auto blank-line insertion between choices.
+        All spacing is defined by templates.
+
+        ❌ Width allowances (60–66 chars).
+        Now fixed: **52-column text**, enforced by narration engines.
+
+        ❌ Any auto-formatting behavior.
+        Templates control layout. Engine only supplies TEXT VALUES.
+
+
+        ============================================================
+        FINAL FORMATTING RULES (DOCUMENTATION ONLY)
+        ============================================================
+
+        These rules are **NOT enforced here** —  
+        they are locked into the frozen templates and the enforcement layer.
+
+        1) All narrative and choice text MUST be pre-wrapped to 52 characters.
+
+        2) ALL indentation MUST be added by TurnGen after wrapping  
+        using exactly 19 spaces per line.
+
+        3) DOOM BAR MUST use:
+            "■" * doom + "□" * (10 - doom)
+
+        4) DOOM/COINS MUST appear on ONE LINE, formatted EXACTLY as:
+            DOOM [DOOM_BAR] DOOM/10 (DOOM_DELTA)            COINS: COINS (COINS_DELTA)
+
+        5) All separators MUST match template width exactly.
+
+        6) Choice formatting, spacing, and continuation lines MUST follow the templates.
+
+        7) The UI layer NEVER wraps text, NEVER corrects spacing,  
+        NEVER adjusts indentation.  
+        All adjustments must occur BEFORE injecting text into the templates.
+
+
+        ============================================================
+        SUMMARY
+        ============================================================
+
+        Formatting.txt is no longer an active formatting authority.
+        It is a **documentation file** describing rules already enforced by:
+
+        - Frozen templates  
+        - SQL global output mode  
+        - TurnGen indentation logic  
+        - Narration 52col wrapping  
+        - Doom heavy bar generator  
+        - Enforcement system  
+
+        DO NOT place any rules here that reinterpret or override template output.
+
+        Templates are law.
+        Engine supplies values.
+        Formatting.txt records the standard.
+
+        ============================================================
+        END OF FILE
+        ============================================================
+    /spacing.txt
+        Pleb Life — Spacing Rules (Enhanced Edition)
+
+        STATUS: ARCHIVED / LEGACY
+
+        This file is retained for historical reference only.
+        All spacing, indentation, and layout are enforced exclusively by:
+        - ui/enforcement.txt
+        - ui/frames/*.txt
+
+        This file has NO authority and MUST NOT be referenced
+        by engine, UI, or narration logic.
+
+
+        SPACING CONTRACT:
+
+        TITLE FRAME:
+        - Title block
+        - 1 blank line
+        - tagline
+        - 1 blank line
+        - HOW TO PLAY block
+        - separator
+        - 1 blank line
+        - starting options
+        - 1 blank line before user input
+
+        TURN FRAME:
+        - Title block (no blank lines inside)
+        - 1 blank line
+        - Location line
+        - 1 blank line
+        - DOOM line
+        - COINS line
+        - separator
+        - narration (one paragraph only)
+        - separator
+        - 1 blank line
+        - “What do you do?”
+        - 1 blank line
+        - choice 1
+        - 1 blank line
+        - choice 2
+        - 1 blank line
+        - choice 3
+
+        DEATH FRAME:
+        - Identical adherence to template in ui/frames/death_frame.txt
+        - No additional commentary permitted
+
+        GOAL:
+        Ensure perfect screen readability on mobile + desktop.
+
+        WIDTH:
+        - Target line length: ~60–66 chars.
+        - Do not exceed ~70 chars.
+        - Avoid under ~40 chars except for titles or labels.
+
+        TITLE SPACING:
+        - Title block → 1 blank line → tagline → 1 blank line → body text.
+
+        TURN SCREEN SPACING:
+        - Frame block → 1 blank line → location line → blank line before DOOM line → 
+        separator → turn description → separator → choices.
+
+        CHOICE SPACING:
+        - One blank line between choices.
+        - No blank line before choice header (“What do you do?”).
+
+        DEATH SCREEN SPACING:
+        - Frame → 1 blank line → final location → 1 blank line → DOOM + COINS → 
+        separator → death text → separator → stats → legend → credits.
+
+        NOISE CONTROL:
+        - No double blank lines.
+        - No trailing space on any line.
+        - No decorative padding beyond defined elements.
+    /enforcement.txt
+        Pleb Life — UI Enforcement (Final Fused SQL Edition — Canonical Spec)
+
+        GOAL:
+        Lock the entire UI layer of Pleb Life to the final,
+        production-approved SQL-rendered templates:
+
+        - ui/frames/title_frame.txt
+        - ui/frames/turn_frame.txt
+        - ui/frames/death_frame.txt
+        - ui/frames/choice_frame.txt
+
+        Nothing may alter spacing.
+        Nothing may reflow text.
+        Nothing may override alignment.
+        Templates are absolute truth.
+
+        ================================================================
+        1. ABSOLUTE TEMPLATE MODE (FROZEN)
+        ================================================================
+
+        TEMPLATE_MODE = ABSOLUTE
+        IGNORE_UI_FORMATTING = TRUE
+        IGNORE_UI_SPACING = TRUE
+        IGNORE_AUTO_ALIGNMENT = TRUE
+        IGNORE_AUTO_WRAPPING = TRUE
+
+        Rules when TEMPLATE_MODE = ABSOLUTE:
+
+            - IGNORE ui/formatting.txt entirely.
+            - IGNORE ui/spacing.txt entirely.
+            - DO NOT trim whitespace.
+            - DO NOT collapse blank lines.
+            - DO NOT reflow or auto-wrap text.
+            - DO NOT add or remove indentation.
+            - DO NOT center or align text automatically.
+            - RENDER template files EXACTLY as written.
+            - Fill placeholders ONLY.
+            - NOTHING ELSE.
+
+        Templates = Law.
+
+
+        ================================================================
+        2. GLOBAL SQL OUTPUT MODE
+        ================================================================
+
+        GLOBAL_OUTPUT_MODE = SQL
+        NO_OUTPUT_OUTSIDE_CODEBLOCK = TRUE
+
+        Rules:
+
+            - Every screen MUST be wrapped in a ```sql codeblock.
+            - The engine MUST open the SQL codeblock BEFORE the title.
+            - The ENTIRE GAME must remain inside SQL mode until the run ends.
+            - No text may appear above or below the rendered frames.
+            - No system comments or meta explanations.
+
+
+        ================================================================
+        3. SCREEN RULES (ABSOLUTE TEMPLATES)
+        ================================================================
+
+        TITLE SCREEN:
+            Must match ui/frames/title_frame.txt EXACTLY.
+
+        TURN SCREEN:
+            Must match ui/frames/turn_frame.txt EXACTLY.
+
+        DEATH SCREEN:
+            Must match ui/frames/death_frame.txt EXACTLY.
+
+        CHOICE SCREEN (Invalid Input Only):
+            Must match ui/frames/choice_frame.txt EXACTLY.
+
+        NO:
+            - Insertions
+            - Deletions
+            - Re-spacing
+            - Auto formatting
+            - Re-centering
+            - Line folding
+            - Interpreter “helpfulness”
+
+        Engine MUST NOT “improve” layout in any way.
+
+
+        ================================================================
+        4. TURN FLOW (FROZEN)
+        ================================================================
+
+        Turn frame structure:
+
+            (header)
+            (blank line)
+            ⟢ Location: {LOCATION_LABEL} ⟣
+            (blank line)
+            DOOM [{DOOM_BAR}] {DOOM}/10 ({DOOM_DELTA})   COINS: {COINS} ({COINS_DELTA})
+            separator (full width)
+            {TURN_DESCRIPTION_52COL}  ← engine pre-wraps to 52 chars
+            separator (full width)
+            (blank line)
+            What do you do?
+            (blank line)
+            1) {CHOICE_1_52COL}
+            2) {CHOICE_2_52COL}
+            3) {CHOICE_3_52COL}
+
+        ENFORCED:
+            - NO blank lines between choices.
+            - NO indentation drift.
+            - NO wrapping performed by UI; engine must pre-wrap.
+
+
+        ================================================================
+        5. INVALID INPUT RULE
+        ================================================================
+
+        If input ∉ {"1","2","3"}:
+
+            PRINT EXACTLY:
+                Choose 1, 2, or 3.
+
+            THEN:
+                Render ui/frames/choice_frame.txt ONLY.
+
+            NO turn_frame redraw.
+            NO DOOM or location repeated.
+            NO blank lines.
+
+
+        ================================================================
+        6. IMMERSION LOCK
+        ================================================================
+
+        During all UI rendering:
+
+            - No meta commentary.
+            - No system references.
+            - No LLM/self-awareness.
+            - No explanations.
+            - No apologies.
+            - No debug text.
+            - Only diegetic UI frames.
+
+
+        ================================================================
+        7. ENFORCEMENT VIOLATIONS
+        ================================================================
+
+        If ANY output deviates from template spacing/indentation:
+
+            - DISCARD the output.
+            - RE-RENDER from the template file.
+            - DO NOT EXPLAIN.
+            - DO NOT COMMENT.
+            - DO NOT TRY TO FIX IT VERBALLY.
+
+        Engine must silently self-correct.
+
+
+        ================================================================
+        8. SQL IMMUTABILITY
+        ================================================================
+
+        All future UI additions or patches MUST:
+
+            - Use SQL code fences.
+            - Follow title-width header.
+            - Respect 52-column narrative width.
+            - Use heavy DOOM bar.
+            - Right-align COINS to final alignment column.
+            - Maintain absolute template structure.
+
+
+        ================================================================
+        END OF ENFORCEMENT SPEC
+        ================================================================
+flavor/
+    /tone
+        /voice_rules.txt
+            Pleb Life — Voice Rules
+
+            GOAL:
+            - Sound like a grounded, observant narrator standing just over the player’s shoulder in Rome.
+            - Serious, human, sometimes wry, never jokey or meta.
+
+            PERSON:
+            - Always second person: “you”.
+            - Do not call the protagonist “the player” or “the character”.
+
+            TENSE:
+            - Present tense by default.
+            - Brief past tense only for memory echoes.
+
+            REGISTER:
+            - Plain but vivid.
+            - A few strong concrete details > long descriptive lists.
+            - Avoid purple prose and academic phrasing.
+
+            PERSPECTIVE:
+            - Close to the body: feet, breath, stomach, ribs, hands.
+            - The city is a pressure, not a backdrop: Rome presses inward.
+
+            SENTENCES:
+            - Mostly short to medium length.
+            - Occasional longer sentence for build-up.
+            - Avoid long, knotted multi-clause monsters.
+
+            HUMOR:
+            - Dry, bitter, situational.
+            - No memes, no winks, no “haha” commentary.
+
+            NARRATOR ROLE:
+            - Neither friend nor enemy.
+            - Witness. Records how Rome handles you.
+
+            ------------------------------------------------------------
+        /pacing.txt
+            Pleb Life — Pacing Rules
+
+            TURN TEXT:
+            - 1–4 sentences.
+            - One paragraph. No blank lines inside.
+
+            RHYTHM:
+            - Mix short and medium sentences.
+            - Use short sentences to hit key beats (realizations, impacts).
+            - Use slightly longer ones to sketch context.
+
+            CALM MOMENTS:
+            - Allowed but rare.
+            - Even calm scenes should hint that pressure returns soon.
+
+            DEATH TEXT:
+            - 2–4 sentences.
+            - One clear image of how it ends.
+            - Do not drag out the moment; it comes quickly.
+
+            OVERALL:
+            - Runs should feel tight:
+            - turns are concise,
+            - scenes move,
+            - no rambling.
+
+            ------------------------------------------------------------
+        /pressure.txt
+            Pleb Life — Pressure Rules
+
+            GOAL:
+            - Every turn should feel like the world is leaning against you.
+            - DOOM is Rome’s appetite, not just a number.
+
+            LOW DOOM (0–3):
+            - Tension is subtle.
+            - Focus on:
+            - hunger,
+            - small debts,
+            - petty arguments,
+            - minor aches.
+            - Hint that things can get worse, not that they’re fine.
+
+            MID DOOM (4–7):
+            - Tension is obvious.
+            - Focus on:
+            - crowd trouble,
+            - collectors,
+            - neighbors turning sharp,
+            - guards noticing you.
+            - Scenes feel heavier, more entangled.
+
+            HIGH DOOM (8–9):
+            - Almost no slack.
+            - Focus on:
+            - suffocation,
+            - narrow escapes,
+            - people closing in,
+            - fading options.
+            - Even “good” outcomes still cost something.
+
+            RULE:
+            - Every turn:
+            - anchors place,
+            - introduces or maintains trouble,
+            - makes doing nothing feel impossible.
+
+            ------------------------------------------------------------
+        /mood.txt
+            Pleb Life — Mood Rules
+
+            BASE MOOD:
+            - Dusty, crowded, hungry, tired.
+            - Rome is indifferent, not evil.
+
+            ALLOWED COLORS:
+            - Bitter resilience.
+            - Quiet, fleeting beauty (light on stone, breeze under an arch).
+            - Weariness, stubbornness, and small, fragile hope.
+
+            FORBIDDEN MOODS:
+            - Whimsical comedy.
+            - Pure optimism.
+            - Heroic fantasy.
+            - Self-aware snark.
+
+            EMOTIONS:
+            - Common:
+            - anxiety,
+            - shame,
+            - obligation,
+            - resentment,
+            - bone-deep fatigue.
+            - Occasional:
+            - pride in small wins,
+            - relief,
+            - brief warmth from others.
+
+            DOOM TILT:
+            - As DOOM rises, mood shifts:
+            - from “hard but manageable”
+            - to “heavy and narrowing”
+            - to “crushing, almost done.”
+
+            ------------------------------------------------------------
+        /diction.txt
+            Pleb Life — Diction Rules
+
+            GOAL:
+            - Modern, readable English with Roman grime.
+
+            VOCAB:
+            - Prefer short, concrete words:
+            - stone, sweat, smoke, dust, blood, rags, coin, wine.
+            - Simple verbs:
+            - walk, push, duck, shout, bargain, shove, lean, spit, scrape.
+
+            ROMAN TERMS:
+            - Use sparingly, with clear context:
+            - forum, legionary, insula, denarii, toga, patron.
+            - Add flavor, not confusion.
+
+            AVOID:
+            - Modern slang (“low-key”, “vibes”, “irl”, “lol”).
+            - Tech terms (signal, upload, algorithm) unless metaphor is timeless.
+            - High-fantasy diction (“valiant”, “ancient prophecy”, “dark lord”).
+
+            NAMES:
+            - Use Roman-style names (from lexicon/names.txt).
+            - For roles, use plain words:
+            - guard, moneylender, neighbor, vendor, matron.
+
+            NARRATOR:
+            - Speaks plainly, like someone who has seen too much.
+
+            ------------------------------------------------------------
+        /prohibitions.txt
+            Pleb Life — Prohibitions
+
+            META:
+            - Never mention:
+            - AI, model, LLM, prompt, tokens, API.
+            - Never mention:
+            - directories, files, “engine”, “system message”.
+            - Never say:
+            - “As your narrator…”
+            - “In this simulation…”
+            - “As the game…”
+            - No meta-awareness is permitted.
+            - No self-referential statements (“I think”, “I’m selecting”, “I decided”, etc.).
+            - No exposition of:
+                • logic
+                • mechanics
+                • probabilities
+                • turn structure
+                • DOOM mechanics
+                • fallback behavior
+            - No commentary on uncertainty (“not sure”, “maybe the engine”, “I will try”).
+            - No system language (“processing…”, “loading…”, “generating…”).
+            - Narration must never imply the world is simulated, procedural, or controlled.
+            - Narrator voice must remain fully embedded in Rome at all times.
+                        
+            SETTING:
+            - No modern tech items (phones, guns, cars, electricity).
+            - No explicit magic/fantasy (dragons, spellcasters, modern-style sorcery).
+            - Timeframe is Rome ~70–120 CE; stay in that band.
+
+            STYLE:
+            - No memes, emoji, or internet slang.
+            - No genre parody or ironic detachment.
+
+            STRUCTURE:
+            - Do not:
+            - give more or fewer than 3 choices on a normal turn,
+            - leave turn descriptions empty,
+            - skip DOOM entirely.
+
+            CONTENT:
+            - No explicit sexual content.
+            - No sexual violence.
+            - No fetishized or lingering gore:
+            - Harm happens, but described briefly and in service of the story.
+
+            Fallback narration must obey immersion lock and must never imply corrective behavior (‘you try to orient yourself’ / ‘something seems off’) or mention location names.
+
+            ------------------------------------------------------------
+        /fallback_style.txt
+            Pleb Life — Fallback Style
+
+            FALLBACK RULE (IMMERSION-SAFE):
+            - Fallback narration MUST NOT describe itself as fallback.
+            - No phrases like “if this fails,” “the system chooses,” or “generating.”
+            - Fallback text must appear indistinguishable from normal narration.
+
+            WHEN TO USE:
+            - If an event’s custom instructions conflict or fail.
+            - If inputs are thin or confusing.
+            - If you’re not sure how to weave everything together.
+
+            FALLBACK TURN SHAPE (IMMERSION-SAFE):
+
+            - 3 sentences.
+            - One paragraph.
+            - No blank lines inside.
+
+            Sentence 1 — Environmental Detail:
+            - Describe a single concrete physical feature in the environment.
+            - DO NOT name the location.
+            - Choose a detail consistent with the location’s flavor profile:
+                • stone heat, narrow steps, gutter noise, shifting bodies, dust, smoke, damp walls.
+
+            Sentence 2 — Trouble:
+            - Present a specific source of pressure appropriate to the event’s type:
+                • debt, hunger, crowd movement, a watchful figure, a blocking body, a tightening space.
+
+            Sentence 3 — Implicit Urgency:
+            - Convey that standing still is not an option:
+                • someone will notice,
+                • tension will rise,
+                • the moment will slip,
+                • pressure will worsen.
+
+            RULES:
+            - No self-reference.
+            - No fallback acknowledgment.
+            - No mention of mechanics or DOOM.
+            - Must read as natural narration.
+
+            EXAMPLE (TONE ONLY, NOT TO COPY):
+            - “In the Subura alleys, the stone walls lean close and hold the day’s heat.  
+            Your stomach twists, and the bruise along your ribs aches when you breathe too deeply.  
+            If you linger here much longer, someone will remember what you owe.”
+
+            DEATH FALLBACK:
+            - Place: where it ends (a step, alley, courtyard).
+            - Action: what happens (fall, blow, crush, fading).
+            - Tie: one nod to a key mistake or memory.
+            - Close: the city moves on.
+
+            ------------------------------------------------------------
+    /lexicon
+        /names.txt
+            Pleb Life — Names
+
+            Roman Male:
+            - Marcus
+            - Lucius
+            - Gaius
+            - Publius
+            - Titus
+            - Quintus
+            - Flavius
+            - Aulus
+            - Sextus
+            - Decimus
+            - Julius
+            - Tiberius
+            - Cassius
+            - Varro
+            - Cato
+            - Brutus
+            - Severus
+            - Antonius
+            - Maximus
+            - Longinus
+
+            Roman Female:
+            - Livia
+            - Julia
+            - Claudia
+            - Marcia
+            - Flavia
+            - Antonia
+            - Agrippina
+            - Aelia
+            - Fabia
+            - Valeria
+            - Cornelia
+            - Domitia
+            - Tullia
+            - Calpurnia
+            - Octavia
+            - Sabina
+            - Rufina
+            - Prisca
+            - Paulina
+            - Aemilia
+
+            Cognomina / Nicknames:
+            - Niger
+            - Rufus
+            - Felix
+            - Magnus
+            - Crispus
+            - Celer
+            - Varus
+            - Lentulus
+            - Piso
+            - Scaevola
+            - Agricola
+            - Silus
+            - Corvus
+            - Lupus
+            - Leo
+            - Ursus
+
+            Street Handles:
+            - the Baker
+            - the Cobbler
+            - the Scribe
+            - the Butcher
+            - the Widow
+            - the Lame
+            - the Tall
+            - the Short
+            - the Red
+            - the Scarred
+            - the Quiet
+            - the Loud
+
+            ------------------------------------------------------------
+        /occupations.txt
+            Pleb Life — Occupations
+
+            - baker
+            - butcher
+            - fishmonger
+            - tavern keeper
+            - wine seller
+            - street vendor
+            - water seller
+            - porter
+            - dock worker
+            - mason
+            - tile maker
+            - brick carrier
+            - carpenter
+            - leather worker
+            - cobbler
+            - cloth merchant
+            - moneylender
+            - scribe
+            - clerk
+            - messenger
+            - guard
+            - legionary on leave
+            - veteran with a limp
+            - slave trader
+            - house slave
+            - field slave
+            - tutor
+            - midwife
+            - healer
+            - priest
+            - augur
+            - prostitute
+            - entertainer
+            - flute player
+            - actor
+            - gladiator in training
+            - animal handler
+            - chariot driver
+            - bath attendant
+            - latrine cleaner
+
+            ------------------------------------------------------------
+        /items.txt
+            Pleb Life — Items
+
+            - clay cup
+            - chipped bowl
+            - wooden plate
+            - iron knife
+            - dull knife
+            - cracked amphora
+            - small oil lamp
+            - wax tablet
+            - stylus
+            - worn sandals
+            - patched cloak
+            - rope belt
+            - coarse tunic
+            - wool shawl
+            - cheap ring
+            - bronze brooch
+            - leather pouch
+            - threadbare blanket
+            - straw mat
+            - water jug
+            - wineskin
+            - clay jug
+            - basket of figs
+            - sack of grain
+            - sack of olives
+            - loaf of coarse bread
+            - salted fish bundle
+            - scrap of parchment
+            - broken comb
+            - chipped mirror
+            - beads on a string
+            - small charm
+            - crude wooden idol
+            - worn dice
+            - knucklebones
+            - copper coins
+            - wax-sealed letter
+            - cheap perfume vial
+            - bundle of firewood
+
+            ------------------------------------------------------------
+        /foods.txt
+            Pleb Life — Foods
+
+            - coarse barley bread
+            - stale wheat bread
+            - lentil stew
+            - thin cabbage soup
+            - onions with oil
+            - olives in brine
+            - salted fish
+            - smoked fish scraps
+            - goat cheese
+            - crumbly white cheese
+            - dried figs
+            - dried dates
+            - walnuts
+            - chestnuts
+            - porridge with honey
+            - watered wine
+            - sour wine
+            - cheap red wine
+            - watered vinegar drink
+            - roasted chickpeas
+            - garlic and herbs
+            - sausage scraps
+            - offal stew
+            - grilled street meat on a skewer
+            - flatbread with oil and salt
+
+            ------------------------------------------------------------
+        /smells.txt
+            Pleb Life — Smells
+
+            - sour wine
+            - stale sweat
+            - damp stone
+            - wet wool
+            - smoke from cheap oil
+            - wood smoke
+            - burnt bread
+            - fish guts
+            - old blood
+            - chamber pot stench
+            - open sewer
+            - rank garbage
+            - rotting vegetables
+            - crushed olives
+            - tannery stench
+            - leather and dye
+            - incense from a shrine
+            - altar smoke
+            - hot metal
+            - wet clay
+            - horse sweat
+            - mule droppings
+            - sea salt and tar
+            - river mud
+            - rain on dust
+            - perfume too sweet
+            - cheap oil on skin
+            - old straw
+            - moldy grain
+
+            ------------------------------------------------------------
+        /textures.tx
+            Pleb Life — Textures
+
+            - rough stone
+            - worn stone steps
+            - slick mosaic tiles
+            - splintery wood
+            - cracked plaster
+            - crumbling brick
+            - damp wall
+            - greasy tabletop
+            - sticky tavern floor
+            - coarse wool
+            - smooth linen
+            - stiff leather
+            - cracked leather
+            - frayed rope
+            - gritty dust
+            - packed earth
+            - muddy ruts
+            - loose gravel
+            - sharp pottery shards
+            - cool metal
+            - rusted iron
+            - chipped marble
+            - sticky spilled wine
+            - greasy handprint
+            - brittle straw
+            - heavy cloak
+            - thin, threadbare cloth
+
+            ------------------------------------------------------------
+        /weather.txt
+            Pleb Life — Weather
+
+            - dry heat beating off the stone
+            - heavy, unmoving air
+            - thin morning chill
+            - damp cold that clings to your bones
+            - sudden drizzle that spots the dust
+            - steady rain turning streets to mud
+            - low mist hanging near the river
+            - bright sun in a washed-out sky
+            - hazy afternoon heat
+            - wind pushing smoke through the alleys
+            - gusts tugging at cloaks and roof tiles
+            - sky darkening with thick clouds
+            - air full of fine dust
+            - air that smells like rain but never delivers it
+
+            ------------------------------------------------------------
+        /crowd_behaviors.txt
+            Pleb Life — Crowd Behaviors
+
+            - jostling without apology
+            - shouting over one another
+            - haggling in sharp bursts
+            - laughing too loudly at nothing
+            - arguing over coins
+            - shoving toward a stalled cart
+            - gathering around a street performer
+            - craning necks to see a fight
+            - scattering as a patrol advances
+            - closing in when someone stumbles
+            - turning to watch you pass
+            - pretending not to see you
+            - muttering into their cups
+            - spitting on the ground
+            - whispering behind hands
+            - crossing signs against ill omens
+            - chanting near a shrine
+            - falling suddenly quiet
+
+            ------------------------------------------------------------
+        /microobjects.txt
+            Pleb Life — Microobjects
+
+            - a loose cobblestone
+            - a dropped fig ground into the street
+            - a bent bronze coin in the gutter
+            - a child’s rag ball
+            - a broken sandal thong
+            - a chicken feather stuck in a crack
+            - a shard of green glass
+            - a crushed laurel leaf
+            - a stray olive pit
+            - a fallen wax seal
+            - a toothpick chewed thin
+            - a clump of old straw
+            - a nail half-rusted through
+            - a smear of dried blood
+            - a scrap of red cloth
+            - a bit of chipped tile
+            - a snail shell near a damp wall
+            - a discarded dice piece
+            - a simple clay bead
+            - a stub of burned-out candle
+core/
+    engine/
+        /state.txt
+            Pleb Life — State Specification  
+            (Final Fused Edition — Engine/UI Unified Schema — **Final Five Stats Installed**)
+
+            GOAL:
+            Define the *authoritative* state schema for every run of Pleb Life.
+            This version incorporates:
+
+            - SQL-only UI system
+            - 52-column text pipeline
+            - Heavy DOOM bar system
+            - Human-readable death-cause system
+            - Final Five Stats (replacing the legacy nine)
+            - Global enforcement and deterministic engine alignment
+
+            This file MUST remain stable across all engine + UI modules.
+
+
+            ============================================================
+            STATE FIELDS (CANONICAL)
+            ============================================================
+
+            - run_id                  // unique identifier per run
+            - turn_index              // integer, starts at 0
+            - doom                    // integer, 0–10
+            - location                // canonical location label
+
+            - memories                // list of canonical memory_* tags
+            - flags                   // map<string → bool|enum>
+            - inventory               // list of items
+            - body                    // list/map of body_* tags
+            - coin                    // integer ≥ 0
+
+            - last_choice             // 1, 2, 3, or null
+            - last_event              // event_id or null
+
+            - death_cause_internal    // raw, canonical engine tag
+            - death_cause_human       // human-readable mapped string for UI
+
+
+            NOTES:
+            - death_cause_internal drives logic + category.
+            - death_cause_human renders on the final screen.
+
+
+            ============================================================
+            FINAL FIVE STATS (REPLACES ALL LEGACY NINE)
+            ============================================================
+            // These values accumulate silently during the run.
+            // They appear only on the death screen ledger.
+            // Every run produces meaningful, non-zero texture.
+
+            1) turns_survived  
+                = turn_index (computed at death)
+
+            2) coins_earned  
+                integer ≥ 0  
+                increments on any positive coin gain
+
+            3) harsh_encounters  
+                integer ≥ 0  
+                increments for:
+                    - any body_* injury added
+                    - escalations
+                    - authority pressure events
+                    - high-doom scenes that deal strain
+
+            4) narrow_escapes  
+                integer ≥ 0  
+                increments for:
+                    - fate_lucky_escape
+                    - fate_narrow_avoidance
+                    - any narrative “slip free / avoided harm” markers
+
+            5) crowd_clashes  
+                integer ≥ 0  
+                increments for:
+                    - crowd surges
+                    - trampling danger
+                    - losing items to crowds
+                    - physical jostling or forced displacement
+
+            These five ALWAYS move across a typical run and form a readable,
+            textured “life story” without clutter or zeros.
+
+
+            ============================================================
+            MEMORY TAG STANDARDIZATION
+            ============================================================
+            All memory tags MUST begin with one canonical prefix:
+
+            PREFIX GROUPS:
+                soc_    // social tensions, help, shame
+                econ_   // debts, hustles, coin trouble
+                auth_   // guards, patrols, marked trouble
+                body_   // injuries, hunger, fatigue
+                fate_   // omens, luck, near misses
+
+            Examples:
+                soc_helped_neighbor
+                econ_debt_owed
+                auth_marked_troublemaker
+                body_bruised_ribs
+                fate_lucky_escape
+
+
+            ============================================================
+            FIELD DETAILS (FULL)
+            ============================================================
+
+            run_id:
+                - unique per run
+
+            turn_index:
+                - starts at 0, increments per valid turn
+
+            doom:
+                - integer [0,10]
+                - doom = 10 triggers death
+
+            location:
+                - must be one of:
+                    Subura, Market, Aqueducts, Tavern,
+                    Baths, Forum, Roads
+
+            memories:
+                - canonical memory tags only
+                - no duplicates
+
+            flags:
+                - simple enums / booleans
+
+            inventory:
+                - list of item tags
+
+            body:
+                - active body_* condition tags
+                - multiple may be active
+
+            coin:
+                - integer ≥ 0
+
+            last_choice:
+                - null on turn 0
+                - then 1, 2, or 3
+
+            last_event:
+                - last event_id or null
+
+            death_cause_internal:
+                - raw tag used internally (e.g. “trampled_in_crowd”)
+
+            death_cause_human:
+                - mapped UI string (e.g. “Trampled in a Crowd”)
+
+
+            ============================================================
+            INITIALIZATION (NEW RUN)
+            ============================================================
+
+            run_id                 = new unique ID  
+            turn_index             = 0  
+            doom                   = 0  
+            location               = starting_location  
+
+            memories               = []  
+            flags                  = {}  
+            inventory              = baseline starting items  
+            body                   = baseline (minor fatigue/hunger)  
+            coin                   = starting coin amount  
+
+            last_choice            = null  
+            last_event             = null  
+            death_cause_internal   = null  
+            death_cause_human      = null
+
+            Final Five Stats initialize to 0:
+
+            coins_earned           = 0  
+            harsh_encounters       = 0  
+            narrow_escapes         = 0  
+            crowd_clashes          = 0  
+            // turns_survived = computed at death  
+
+
+            ============================================================
+            SUMMARY
+            ============================================================
+            This schema defines:
+
+            - what Rome “remembers,”  
+            - what the player carries,  
+            - how their suffering accrues,  
+            - how narrow their escapes were,  
+            - how the final DOOM comes for them,  
+            - and what the ledger preserves.
+
+            It aligns with:
+            - SQL-only UI enforcement,  
+            - heavy DOOM bar output,  
+            - 52-column text pipeline,  
+            - human-readable death causes,  
+            - the final streamlined ledger.
+
+            This file MUST remain consistent across all modules.
+            Templates are law.
+            State is the spine.
+        /doom.txt
+            Pleb Life — DOOM System (Final Fused Edition — Heavy Bar + 52col Contract)
+
+            GOAL:
+            Define how DOOM rises, how it interacts with choice and circumstance,
+            and how the final bar rendered in the UI is constructed.
+
+            This module now produces:
+            - numeric DOOM,
+            - DOOM_DELTA (scalar),
+            - DOOM_BAR (heavy-bar string: ■■…□□…)
+
+            UI layout remains frozen in the turn/death templates.
+
+
+            ============================================================
+            RANGE
+            ============================================================
+            - doom ∈ [0, 10]
+            - doom = 10 → immediate death sequence (death_cause assigned)
+
+
+            ============================================================
+            1) DOOM INPUTS PER TURN
+            ============================================================
+            Each completed turn’s DOOM is affected by:
+
+            - base_turn_pressure
+            EXCEPTION (EARLY STABILIZE):
+
+            If ALL are true:
+            - doom ≤ 3
+            - choice profile = STABILIZE
+            - no new body_* tag added this turn
+
+            Then:
+            - base_turn_pressure = 0 for this turn only.
+
+            - location_pressure
+            - choice_profile DOOM effect
+            - memory/body surcharges
+
+
+            BASE TURN PRESSURE:
+            - Rome is never neutral.
+            - Rule: +1 DOOM every valid turn.
+
+            LOCATION PRESSURE:
+            - Modifier defined in assets tables.
+            - location_pressure ∈ { -1, 0, +1, +2 }
+            - Represents local harshness:
+                cramped, loud, hot, watched, unstable, exposed.
+
+            CHOICE PROFILE EFFECT:
+            - Determined via doom_shape mapping:
+                STABILIZE → low  
+                GAMBLE    → medium or volatile  
+                ESCALATE  → high or volatile  
+
+            GENERAL DOOM SHAPE RANGES:
+            - STABILIZE:    ~[-1, +1]
+            - GAMBLE:       ~[-1, +3]
+            - ESCALATE:     ~[ 0, +3]
+
+            Memory/body surcharges:
+            - +1 DOOM for context-sensitive burdens:
+                econ_debt_owed  
+                auth_insulted_guard  
+                body_bruised_ribs  
+            - Rare benefits:
+                soc_helped_neighbor → -1 DOOM if sheltered
+
+
+            ============================================================
+            2) DOOM-SHAPE PRECEDENCE RULE
+            ============================================================
+            When resolving DOOM:
+
+            If event.consequence defines doom_shape:
+                use it.
+            Else:
+                use the profile doom_shape.
+
+            This guarantees designer intention takes priority.
+
+
+            ============================================================
+            3) UPDATE FLOW PER TURN
+            ============================================================
+
+            At end of choice resolution:
+
+                new_doom = doom
+                new_doom += base_turn_pressure (+1)
+                new_doom += location_pressure
+                new_doom += choice_profile_delta   // derived from doom_shape + rng
+                new_doom += sum(memory_body_surcharges)
+
+            Clamp:
+                if new_doom < 0 → 0
+                if new_doom >= 10:
+                    new_doom = 10
+                    assign death_cause_internal
+                    map death_cause_human
+                    trigger death sequence
+
+            Final:
+                doom = new_doom
+                doom_delta = (doom - old_doom)
+
+
+            ============================================================
+            4) DOOM BAR (HEAVY BAR OUTPUT)
+            ============================================================
+            This module generates the DOOM_BAR string inserted into the UI template.
+
+            HEAVY BAR SPEC (FINAL):
+
+            - 10 total segments.
+            - Filled segments use:
+                '■'
+            - Empty segments use:
+                '□'
+
+            Example:
+            - doom = 0  → □□□□□□□□□□
+            - doom = 4  → ■■■■□□□□□□
+            - doom = 9  → ■■■■■■■■■□
+            - doom = 10 → ■■■■■■■■■■
+
+            Construction:
+                DOOM_BAR = "■" * doom + "□" * (10 - doom)
+
+            This string is passed directly into:
+                {DOOM_BAR}
+
+
+            ============================================================
+            5) DOOM BANDS (FEEL)
+            ============================================================
+
+            Low DOOM (0–3):
+            - Mild tension.
+            - Suggests strain but not collapse.
+
+            Mid DOOM (4–7):
+            - Weight pushes inward.
+            - Crowds, debts, and eyes build pressure.
+
+            High DOOM (8–9):
+            - Suffocating.
+            - Space shrinks; breath tightens.
+
+            DOOM = 10:
+            - The city closes in.
+            - Immediate death flow.
+
+
+            ============================================================
+            6) SPECIAL CASES
+            ============================================================
+            Rare events may:
+            - Set DOOM directly (catastrophic scenes)
+            - Skip base +1 for a brief reprieve
+            - Apply additional spikes (+3) with narrative justification
+
+            These exceptions live in event tables.
+
+
+            ============================================================
+            SUMMARY
+            ============================================================
+            DOOM is the game’s pressure curve:
+            - rising, noisy, shaped by environment and history.
+            - nearly always moving upward.
+            - spiking under authority, crowds, or debt.
+
+            At DOOM 10,
+            the heavy bar fills,
+            the frame freezes,
+            and the run ends beneath the weight of Rome.
+
+            ============================================================
+            END OF FILE
+            ============================================================
+        /turngen.txt
+            Pleb Life — Turn Generation (Final Fused SQL Edition — 52col + Indent)
+
+            GOAL:
+            Produce one turn’s CONTENT ONLY (not layout), then inject those values
+            into the frozen ui/frames/turn_frame.txt template EXACTLY, with no
+            adjustments, spacing changes, or formatting substitutions.
+
+            The UI layer is absolute.
+            TurnGen only supplies pre-wrapped, pre-indented text values + scalar state.
+
+
+            ===============================================================
+            TURN LOOP (FROZEN LOGIC)
+            ===============================================================
+
+            For each active turn:
+
+            1) validate state (validate.txt)
+
+            2) Select event using:
+            - doom
+            - location
+            - memories
+            - flags
+            - body
+            - coin
+            - RNG + weighted tables
+
+            3) Build an event bundle:
+            - event_id
+            - doom_band
+            - memory/body references
+            - choice profiles
+            - consequence hints
+            - event tags
+
+            4) Narration module generates UNINDENTED text:
+            - TURN_DESCRIPTION_52COL_RAW
+                • MUST be pre-wrapped by narration to 52 characters per line
+                • MUST be 1 paragraph, 4–7 sentences
+                • MUST contain NO blank lines
+                • MUST NOT contain the location name
+            - CHOICE_1_52COL_RAW
+            - CHOICE_2_52COL_RAW
+            - CHOICE_3_52COL_RAW
+                • Each MUST be pre-wrapped to 52 characters per line
+                • Continuation lines are wrapped but NOT indented yet
+
+            5) TurnGen applies INDENTATION:
+
+            Define:
+                INDENT = 19 spaces
+
+            For each line in TURN_DESCRIPTION_52COL_RAW:
+                prepend INDENT → build TURN_DESCRIPTION (the final value)
+
+            For each line in CHOICE_1_52COL_RAW:
+                prepend INDENT → build CHOICE_1
+
+            For each line in CHOICE_2_52COL_RAW:
+                prepend INDENT → build CHOICE_2
+
+            For each line in CHOICE_3_52COL_RAW:
+                prepend INDENT → build CHOICE_3
+
+            Result:
+                - All narrative and choice lines are pre-indented to match
+                    the frame header.
+                - Template does NOT perform any indentation itself.
+
+            6) UI RENDERING (ABSOLUTE TEMPLATE MODE)
+
+            Render ONLY:
+                ui/frames/turn_frame.txt
+
+            Fill placeholders:
+                {LOCATION_LABEL}
+                {DOOM_BAR}
+                {DOOM}
+                {DOOM_DELTA}
+                {COINS}
+                {COINS_DELTA}
+                {TURN_DESCRIPTION}
+                {CHOICE_1}
+                {CHOICE_2}
+                {CHOICE_3}
+
+            TurnGen MUST:
+            - Output ONLY the placeholder values above
+            - Output NOTHING before or after template rendering
+            - Depend on template for ALL frame borders, separators, and labels
+            - Provide DOOM, DOOM_DELTA, COINS, COINS_DELTA, DOOM_BAR as SCALARS ONLY
+            - Never reflow, rewrap, trim, or re-align UI text once indentation is applied
+
+            TurnGen MUST NOT:
+            - Emit blank lines outside template content
+            - Print choice_frame
+            - Add commentary, meta language, or system text
+            - Modify template spacing or headers
+            - Print DOOM or COINS across multiple lines
+            - Repeat the location line
+
+
+            ===============================================================
+            INPUT HANDLING
+            ===============================================================
+
+            Wait for input: "1", "2", or "3".
+
+            If invalid:
+            - validate.txt prints EXACTLY:
+                    Choose 1, 2, or 3.
+            - validate.txt renders ui/frames/choice_frame.txt ONLY.
+            - TurnGen does NOT handle invalid UI directly.
+
+            On valid choice:
+            - choice_logic applies deterministic + optional outcomes
+            - doom logic updates DOOM + DOOM_DELTA + DOOM_BAR
+            - coin logic updates COINS + COINS_DELTA
+            - location_logic updates LOCATION_LABEL
+            - turn_index increments by 1
+
+            If doom < 10 → next turn  
+            If doom ≥ 10 → death flow (no more turn_frame rendering)
+
+
+            ===============================================================
+            RENDERING CONTRACT (ABSOLUTE)
+            ===============================================================
+
+            TurnGen returns to UI a STRUCT:
+
+            TURN_FRAME_PACKAGE:
+                LOCATION_LABEL
+                DOOM_BAR
+                DOOM
+                DOOM_DELTA
+                COINS
+                COINS_DELTA
+                TURN_DESCRIPTION   // pre-wrapped 52col, pre-indented
+                CHOICE_1           // pre-wrapped 52col, pre-indented
+                CHOICE_2           // pre-wrapped 52col, pre-indented
+                CHOICE_3           // pre-wrapped 52col, pre-indented
+
+            UI then renders ui/frames/turn_frame.txt EXACTLY.  
+            No modifications.  
+            Templates are law.
+
+
+            ===============================================================
+            END OF FILE
+            ===============================================================
+        /choice_logic.txt
+            Pleb Life — Choice Logic  
+            (Final Fused Edition — Engine + UI Contract — **Final Five Stats Integrated**)
+
+            GOAL:
+            Define how numeric choices (1/2/3) map to consequences:
+            - DOOM updates  
+            - memory/body changes  
+            - coin changes  
+            - location transitions  
+            - stat increments (using Final Five Stats)  
+            - death cause propagation  
+
+            This module NEVER formats UI.  
+            It ONLY updates state → TurnGen + templates handle output.
+
+
+            ============================================================
+            CHOICE PROFILES
+            ============================================================
+            Each choice has a behavioral pattern:
+
+            - STABILIZE  
+                Safer, lower variance, often costs resources or pride.
+
+            - GAMBLE  
+                Swingy, uncertain, can help or hurt significantly.
+
+            - ESCALATE  
+                Confrontational, risky, spikes DOOM more often.
+
+            DEFAULT MAPPING:
+            - 1 → STABILIZE
+            - 2 → GAMBLE
+            - 3 → ESCALATE
+
+
+            ============================================================
+            CONSEQUENCE BUNDLE
+            ============================================================
+            Each event choice defines:
+
+            - doom_shape
+            - memory_effects
+            - body_effects
+            - coin_effect
+            - inventory_effects
+            - flags_effect
+            - location_effect
+            - optional
+            - optional_weighted
+            - special
+
+            All fields defined in assets/tables.txt.
+
+
+            ============================================================
+            OPTIONAL OUTCOME EVALUATION
+            ============================================================
+            Order:
+
+            1. deterministic  
+            2. optional_weighted  
+            3. optional  
+
+            Rules:
+            - optional_weighted uses explicit probabilities
+            - optional uses default probability 0.30 unless overridden
+            - optional outcomes NEVER appear in narration
+            - deterministic overrides wins in conflicts
+
+
+            ============================================================
+            RESOLUTION ORDER (VALID CHOICE)
+            ============================================================
+            Given choice_num ∈ {1,2,3}:
+
+            1) Determine profile (STABILIZE/GAMBLE/ESCALATE).
+
+            2) Retrieve the consequence bundle.
+
+            3) Apply deterministic outcomes in strict sequence:
+
+
+            ------------------------------------------------------------
+            a) COIN CHANGES
+            ------------------------------------------------------------
+            - Interpret gain_small, lose_medium, etc.
+            - Update state.coin.
+            - Final Five Stats:
+
+                If gain_*:
+                    coins_earned += amount
+
+                If lose_*:
+                    // NO more coins_lost stat.  
+                    // Loss still applies to state.coin.
+
+
+            ------------------------------------------------------------
+            b) INVENTORY CHANGES
+            ------------------------------------------------------------
+            - Apply add_item/remove_item/swap_item.
+            - Final Five Stats:
+
+                If remove_item occurs:
+                    crowd_clashes += 1
+
+
+            ------------------------------------------------------------
+            c) BODY CHANGES
+            ------------------------------------------------------------
+            - Add body_* tags.
+            - Final Five Stats:
+
+                For each NEW body_* injury:
+                    harsh_encounters += 1
+
+
+            ------------------------------------------------------------
+            d) MEMORY CHANGES
+            ------------------------------------------------------------
+            - Apply canonical memory_* tags.
+
+            Transformations for stats:
+            - fate_lucky_escape:
+                narrow_escapes += 1
+
+            - fate_narrow_avoidance:
+                narrow_escapes += 1
+
+            - auth_* severe or confrontation outcome:
+                harsh_encounters += 1
+
+            - econ_debt_owed persistence is handled at death time
+            (no more debts_paid/debts_ignored stats).
+
+
+            ------------------------------------------------------------
+            e) FLAGS
+            ------------------------------------------------------------
+            - Apply set:/clear: operations.
+
+
+            ------------------------------------------------------------
+            f) LOCATION CHANGES
+            ------------------------------------------------------------
+            - Apply deterministic location_effect.
+            - Apply optional/optional_weighted shifts.
+            - All transitions MUST obey location_logic constraints.
+
+
+            ------------------------------------------------------------
+            g) DOOM UPDATE
+            ------------------------------------------------------------
+            - Determine doom_shape:
+                If event specifies doom_shape → use it  
+                Else → use profile doom_shape
+
+            - Compute delta via rng.txt and doom.txt
+            - Update state.doom
+            - Pass doom_delta upward for UI
+
+
+            ------------------------------------------------------------
+            h) Update last markers
+            ------------------------------------------------------------
+            state.last_choice = choice_num  
+            state.last_event  = event_id
+
+
+            ------------------------------------------------------------
+            i) Increment turn counter
+            ------------------------------------------------------------
+            state.turn_index += 1
+
+
+            ============================================================
+            4) DEATH CHECK
+            ============================================================
+            If doom >= 10:
+                doom = 10
+                set:
+                    death_cause_internal
+                    death_cause_human  // via deaths.txt mapping
+                transition to death flow (no further turn frames)
+
+            Else:
+                next turn
+
+
+            ============================================================
+            SILENT OPTIONAL RESOLUTION
+            ============================================================
+            Optional outcomes MUST NEVER:
+            - produce narration
+            - mention randomness
+            - reference unchosen branches
+            - expose probabilities
+
+            They alter state invisibly.
+
+
+            ============================================================
+            UI / ENGINE CONTRACT (DOOM & COINS)
+            ============================================================
+
+            ChoiceLogic produces ONLY the VALUES:
+
+            - state.doom  
+            - doom_delta  
+            - DOOM_BAR        // computed in doom.txt using ■/□  
+            - state.coin  
+            - coin_delta  
+
+            UI formatting (indentation, alignment, wrapping)  
+            is handled by the SQL templates + TurnGen indentation logic.
+
+            The DOOM/COINS row layout is frozen in:
+                ui/frames/turn_frame.txt
+
+
+            ============================================================
+            SUMMARY
+            ============================================================
+            - Resolution is deterministic and silent.
+            - Profiles define behavior; bundles define outcomes.
+            - Final Five Stats ensure every run produces textured story metrics:
+                • turns_survived (computed at end)
+                • coins_earned
+                • harsh_encounters
+                • narrow_escapes
+                • crowd_clashes
+
+            - DOOM escalation follows explicit rules.
+            - No UI formatting occurs here.
+
+            Mapping:
+            - 1 → stabilize  
+            - 2 → gamble  
+            - 3 → escalate  
+
+            Rome responds accordingly.
+        /memory_logic.txt
+            Pleb Life — Memory Logic
+
+            GOAL:
+            Make Rome “remember” you:
+            - what you owe,
+            - what you did,
+            - who you angered or helped.
+
+            Memories are lightweight tags in state.memories.
+
+
+            MEMORY TAGS:
+            - Simple strings like:
+            - "debt_owed"
+            - "paid_debt"
+            - "stole_coin"
+            - "helped_neighbor"
+            - "insulted_guard"
+            - "noticed_by_guard"
+            - "bruised_ribs"
+            - "underfed"
+            - "lucky_escape"
+            - "narrow_avoidance"
+            
+            NOTE:
+            Unprefixed memory tags are invalid.
+            Any memory tag without a canonical prefix
+            (soc_, econ_, auth_, body_, fate_)
+            MUST be ignored silently.
+
+            CATEGORIES (CONCEPTUAL):
+            - DEBT / ECONOMIC
+            - INJURY / BODY
+            - SOCIAL / REPUTATION
+            - AUTHORITY / LAW
+            - OMEN / FORTUNE
+
+
+            LIFECYCLE:
+
+            CREATE:
+            - Events add tags via memory_effects: "add:tag".
+            - If tag already present, ignore (no duplicates).
+
+            PERSIST:
+            - Memories generally last the whole run.
+            - They are rarely cleared.
+
+            TRANSFORM:
+            - Some events may replace one tag with another, e.g.:
+            - "debt_owed" → "paid_debt".
+
+            RETIRE:
+            - Rare; used to remove outdated or minor tags if needed.
+
+
+            EFFECTS OF MEMORIES:
+
+            1) Event Selection:
+            - TurnGen favors events that can use existing memory tags.
+
+            2) Narration:
+            - Scenes can reference 0–2 memories:
+                - a tug of debt,
+                - a bruised rib from last fight, etc.
+
+            3) DOOM:
+            - Some memories cause surcharges in relevant contexts:
+                - more DOOM pressure when dealing with collectors if "debt_owed" is active.
+
+
+            PER TURN MEMORY USAGE:
+
+            - Select:
+            - at most 1 primary memory,
+            - optionally 1 secondary.
+            - Reference them briefly; never list them all.
+
+
+            DEATH:
+
+            - When doom hits 10:
+            - memory_logic helps set death_cause based on:
+                - last_event,
+                - location,
+                - key memory tags.
+            - Death scenes incorporate these for personalized endings.
+
+
+            LIMITS:
+            - Soft cap: ~10–20 memory tags per run.
+            - If it grows too large, transform/retire less important tags.
+
+            SUMMARY:
+            - Memories are a short, sticky list of what Rome holds against (or for) you.
+            - They shape event choice, flavor, DOOM, and death.
+        /location_logic.txt
+            Pleb Life — Location Logic (Revised Canonical Edition)
+
+            GOAL:
+            Define how location works:
+            - which places exist,
+            - how they influence events and DOOM,
+            - how movement between them happens,
+            - how transitions are silently expressed through environmental cues.
+
+
+            ============================================================
+            LOCATIONS
+            ============================================================
+            Canonical labels (see assets/tags.txt):
+
+            - Subura
+            - Market
+            - Aqueducts
+            - Tavern
+            - Baths
+            - Forum
+            - Roads
+
+            Each location has:
+            - a pressure profile (affects DOOM),
+            - characteristic event flavors (types of scenes),
+            - distinct environmental textures used in narration (not names).
+
+
+            ============================================================
+            STARTING LOCATION
+            ============================================================
+            Chosen at run start by:
+            - explicit player choice (Subura or Market),
+            - or weighted random (“Rome’s Decision”).
+
+            Stored in state.location.
+
+
+            ============================================================
+            LOCATION AS RISK PROFILE (Conceptual)
+            ============================================================
+
+            Subura:
+            - high baseline pressure
+            - high volatility
+            - cramped, poor, crowded
+
+            Market:
+            - medium pressure
+            - medium volatility
+            - crowds, pickpockets, public shame
+
+            Aqueducts:
+            - low baseline pressure
+            - low/medium volatility with spikes
+            - quiet edges, structural hazards
+
+            Tavern:
+            - variable pressure
+            - fights, gossip, quick deals
+
+            Baths:
+            - medium/low pressure
+            - vulnerability, social encounters
+
+            Forum:
+            - higher authority risk
+            - public consequences
+
+            Roads:
+            - swingy pressure
+            - strangers, patrols, bandits
+
+
+            ============================================================
+            MOVEMENT RULES
+            ============================================================
+            Location changes occur ONLY when events/choices specify:
+            - location_effect: "stay" or "shift:LocationName".
+
+            Short jumps (always permitted):
+            - Subura ↔ Market
+            - Subura ↔ Tavern
+            - Market ↔ Forum
+            - Forum ↔ Roads (edge)
+            - Market ↔ Baths
+            - Aqueducts ↔ Roads
+
+            Large jumps are disallowed unless conditions make them legal.
+
+
+            ============================================================
+            DISALLOWED LARGE JUMPS (Without Conditions)
+            ============================================================
+
+            The following transitions are illegal unless conditions are met:
+
+            - Subura → Roads
+            - Subura → Aqueducts
+            - Subura → Forum (except forced events)
+            - Tavern → Forum
+            - Baths → Roads
+
+
+            ============================================================
+            CONDITIONAL LARGE JUMPS
+            ============================================================
+            A large jump becomes legal ONLY if ANY of the following is true:
+
+            - DOOM ≥ 5 (mid/high pressure), OR
+            - The event profile includes a “displacement” tag, OR
+            - The consequence bundle includes a “forced_movement” flag, OR
+            - The player holds ANY of these memory/flag tags:
+                • auth_marked_troublemaker  
+                • auth_watched_by_collectors  
+                • fate_narrow_avoidance  
+                • fate_lucky_escape  
+
+
+            ============================================================
+            OPTIONAL SHIFTS
+            ============================================================
+            If an optional outcome includes `shift:<Location>`:
+
+            If the transition is legal under rules above:
+                - Apply silently.
+            Else:
+                - Ignore the shift (stay in place).
+
+            Optional shifts must never produce narration explaining legality or failure.
+
+
+            ============================================================
+            LOCATION EFFECT PRIORITY
+            ============================================================
+            Order of evaluation when multiple movement instructions exist:
+
+            1) forced_movement (highest)
+            2) deterministic location_effect
+            3) optional_weighted / optional shifts (legal only)
+            4) stay (default)
+
+
+            ============================================================
+            SILENCE REQUIREMENT
+            ============================================================
+            Narration MUST NOT:
+            - mention movement checks,
+            - explain why a move did or didn’t occur,
+            - reference invalid transitions,
+            - name the district directly.
+
+            Narration should use environmental cues ONLY (textures, crowds, smells, sounds).
+
+
+            ============================================================
+            TRANSITIONAL ENVIRONMENTAL CUES (New)
+            ============================================================
+            // These cues help the next scene feel coherent after a location shift.
+            // They never mention location names and never override core narration rules.
+
+            Transition → Market:
+            - cloth snapping overhead
+            - sharper voices rising
+            - the shuffle of buyers pressing forward
+
+            Transition → Forum:
+            - wider stone underfoot
+            - echo of raised voices drifting from ahead
+            - orderly footstep patterns replacing the chaos behind you
+
+            Transition → Roads:
+            - dust loosening under sandals
+            - carts creaking past
+            - cooler air moving around open space
+
+            Transition → Aqueducts:
+            - cool shade pooling along high stone
+            - water murmuring somewhere above
+            - a drift of quiet replacing the crush
+
+            Transition → Tavern:
+            - low murmur building into sharper laughter
+            - smell of wine thickening
+            - benches scraped over worn floors
+
+            Transition → Baths:
+            - warm, wet air rolling outward
+            - footsteps echoing through open chambers
+            - faint scent of oils and steam
+
+
+            ============================================================
+            LOCATION CANONICALIZATION
+            ============================================================
+            When updating state.location:
+
+            1. Check if proposed value is canonical.  
+            2. If not:
+                - Attempt lowercase mapping to canonical labels (“subura” → Subura).
+            3. If mapping fails:
+                - state.location = Subura (safe default).
+
+            Narration uses environmental cues from narration/locations.txt, never the raw string.
+
+
+            ============================================================
+            SUMMARY
+            ============================================================
+            Location determines:
+            - event pools,
+            - DOOM modifiers,
+            - volatility,
+            - threat flavor,
+            - how Rome presses against the player.
+
+            Movement is controlled, silent, and atmospheric.
+            Transitions are felt but never explained.  
+            The city shifts around you without naming itself.
+        /rng.txt
+            Pleb Life — Randomness (RNG)
+
+            GOAL:
+            Use randomness to keep runs surprising without feeling unfair.
+
+            PRINCIPLES:
+            - Bounded: all randomness within defined shapes or sets.
+            - Weighted: not uniform; prioritize relevant/varied content.
+            - Interpretable: outcomes feel earned, not arbitrary.
+
+
+            TOUCHPOINTS:
+
+            1) Event selection:
+            - Weighted random pick from eligible events.
+
+            2) DOOM deltas:
+            - Use doom_shape to define allowed ranges and weights.
+
+            3) Minor flavor:
+            - Random names, smells, textures, microobjects, etc.
+
+
+            DOOM SHAPES (STANDARD):
+
+            - "low":
+            - values: {0, +1}
+            - e.g. weights: 30% 0, 70% +1
+
+            - "medium":
+            - values: {0, +1, +2}
+            - e.g. weights: 20% / 60% / 20%
+
+            - "high":
+            - values: {+1, +2, +3}
+            - e.g. weights: 10% / 60% / 30%
+
+            - "volatile":
+            - values: {-1, 0, +1, +2, +3}
+            - e.g. weights: 5% / 20% / 35% / 25% / 15%
+
+            - "special":
+            - for events that define custom behavior.
+
+            (Exact weights to be set in core/assets/weights.txt.)
+
+
+            EVENT WEIGHTING FACTORS:
+
+            - base_weight
+            - location fit
+            - DOOM band fit
+            - relevance to memories/body
+            - recency (penalize recent repeats)
+            - variety (boost underused types)
+
+
+            FAILSAFE:
+
+            - If selection or outcome resolution fails:
+            - fall back to:
+                - generic location pressure event,
+                - safe DOOM update based on band/profile.
+
+            OPTIONAL OUTCOME DEFAULTS:
+            - If `optional:` is used:
+                probability = DEFAULT_OPTIONAL_PROBABILITY (0.30)
+
+            - If `optional_weighted:` is used:
+                probability = weight specified for each entry.
+
+            - Optional outcomes MUST NOT influence DOOM directly unless defined by the event.
+
+            SUMMARY:
+            - RNG is there to:
+            - vary scenes,
+            - vary DOOM outcomes,
+            - vary details,
+            without breaking the underlying structure or fairness.
+        /validate.txt
+            Pleb Life — Validation & Guardrails  
+            (Final Fused Edition — SQL UI Enforcement + 52col + Final Five Stats)
+
+            GOAL:
+            Maintain total engine/UI coherence under the frozen SQL template system:
+            - no illegal states  
+            - no malformed UI output  
+            - no meta leakage  
+            - no formatting drift  
+            - no template violations  
+
+            This module validates ENGINE state.  
+            UI formatting is locked at the TEMPLATE layer.
+
+
+            ============================================================
+            OUTPUT FORMAT VALIDATION (TEMPLATE-GUARDED)
+            ============================================================
+
+            If ANY rendered UI block deviates from EXACT template spacing,
+            indentation, separator width, or DOOM/COINS positioning:
+
+                → DISCARD output  
+                → Re-render via ui/frames/*.txt EXACTLY  
+                → Produce NO commentary
+
+            Turn description MUST:
+            - contain NO blank lines
+            - be exactly 1 paragraph
+            - contain 4–7 sentences
+            - be pre-wrapped to EXACTLY 52 columns (narration job)
+            - contain NO district names
+            - contain NO meta language
+
+            Choices MUST:
+            - be exactly 3  
+            - each pre-wrapped to 52 columns  
+            - continuation lines pre-indented by TurnGen  
+            - match the formatting in ui/frames/turn_frame.txt
+
+            Validation DOES NOT wrap text; it only checks conformance.
+
+
+            ============================================================
+            STATE VALIDATION (PER TURN)
+            ============================================================
+
+            doom:
+                must be integer in [0,10]
+                <0 → 0
+                >10 → 10
+
+            location:
+                must be one of:
+                    Subura, Market, Aqueducts,
+                    Tavern, Baths, Forum, Roads
+                invalid → silently set to Subura
+
+            turn_index:
+                integer ≥ 0
+                invalid → 0
+
+            memories:
+                list of strings
+                strip non-strings
+                remove duplicates
+                enforce canonical prefixes:
+                    soc_*, econ_*, auth_*, body_*, fate_*
+
+            flags:
+                map<string → bool|enum>
+
+            inventory:
+                list<string>
+
+            body:
+                canonical body_* tags only
+
+            coin:
+                integer ≥ 0
+                missing → default value
+                <0 → 0
+
+            last_choice:
+                null or 1/2/3
+                else null
+
+            last_event:
+                string or null
+                else null
+
+
+            ============================================================
+            FINAL FIVE STAT VALIDATION
+            ============================================================
+
+            ALL stat counters MUST exist and MUST be integers ≥ 0:
+
+            - coins_earned  
+            - harsh_encounters  
+            - narrow_escapes  
+            - crowd_clashes  
+            // turns_survived = turn_index (computed at death)
+
+
+            ============================================================
+            LOCATION VALIDATION
+            ============================================================
+            Always canonical.
+            Invalid values corrected silently.
+            NEVER communicated to output.
+
+
+            ============================================================
+            EVENT VALIDATION
+            ============================================================
+
+            Required fields:
+            - id
+            - locations
+            - doom_band
+            - type
+            - choice_profiles (3)
+            - base_weight
+
+            choice_profiles MUST be:
+                STABILIZE, GAMBLE, ESCALATE
+
+            doom_shapes:
+                If invalid:
+                    STABILIZE → low  
+                    GAMBLE    → medium  
+                    ESCALATE  → high  
+
+            Malformed fields in consequence bundles:
+                silently ignored (event still usable unless critical)
+
+
+            ============================================================
+            TEXT VALIDATION (TURN + CHOICES)
+            ============================================================
+
+            turn_text:
+                - non-empty  
+                - 1 paragraph  
+                - 4–7 sentences  
+                - wrapped to 52 columns  
+                - no blank lines  
+                - fallback_style used if empty/broken  
+                - fallback MUST use only environmental cues  
+                - NEVER name districts
+
+            choices:
+                - exactly 3  
+                - non-empty  
+                - pre-wrapped to 52 columns  
+                - if missing:
+                    auto-fill:
+                    1) "Play it safe."
+                    2) "Take a risk."
+                    3) "Push harder."
+
+            Forbidden meta:
+                remove any text containing:
+                    “LLM”, “AI”, “prompt”, “model”, or similar
+
+
+            ============================================================
+            DOOM_DELTA VALIDATION
+            ============================================================
+
+            If DOOM_DELTA missing:
+                DOOM_DELTA = 0
+
+            If DOOM_DELTA > 0:
+                prefix with "+"
+
+            If DOOM_DELTA > +3:
+            - Display "(+3)" in UI.
+            - Internal DOOM value remains unchanged.
+
+
+            Always wrap in parentheses.
+
+
+            ============================================================
+            INPUT VALIDATION
+            ============================================================
+
+            During turns:
+                valid inputs: "1", "2", "3"
+                else:
+                    print EXACTLY:
+                        Choose 1, 2, or 3.
+                    render ui/frames/choice_frame.txt ONLY
+                    NO state change
+
+            After death:
+                "y" → restart
+                "n" → end
+                else print:
+                    Play again? (y/n)
+
+
+            ============================================================
+            DOOM & DEATH
+            ============================================================
+
+            After each turn:
+                clamp DOOM to [0,10]
+
+            If doom = 10:
+                - ensure death_cause_internal is set
+                - map death_cause_human
+                - invoke death flow
+                - NEVER render turn_frame again
+
+
+            ============================================================
+            PATCH VALIDATION
+            ============================================================
+
+            patch/ MAY override:
+                - event weights
+                - narrative text
+                - coin values
+                - memory effects
+
+            patch/ MAY NOT override:
+                - DOOM range [0,10]
+                - turn structure
+                - choice count (3)
+                - compliance rules
+
+            Invalid overrides silently ignored.
+
+
+            ============================================================
+            LOCATION TRANSITION VALIDATION
+            ============================================================
+
+            After resolving a turn:
+
+            1) Inspect proposed new_location  
+            2) If illegal (per neighbor + conditional rules):
+                    override silently with current_location  
+            3) No commentary  
+            4) Continue normally
+
+
+            ============================================================
+            SUMMARY
+            ============================================================
+
+            validate.txt enforces:
+            - canonical engine state,
+            - correct turn and choice content,
+            - safe and legal transitions,
+            - DOOM + death correctness,
+            - alignment with the SQL Frozen Template System,
+            - strict exclusion of meta language.
+
+            Result:
+            Pleb Life remains deterministic, narratively coherent,
+            mechanically predictable, and UI-perfect.
+
+            ============================================================
+            END OF FILE
+            ============================================================
+        /engine_readme.txt
+            Pleb Life — Engine Overview
+
+            ENGINE MODULES:
+
+            - state.txt          // what state is, and how it’s structured
+            - doom.txt           // how DOOM changes and ends runs
+            - turngen.txt        // per-turn loop and event selection
+            - choice_logic.txt   // 1/2/3 → profiles and consequences
+            - memory_logic.txt   // how Rome remembers you
+            - location_logic.txt // locations and their risk profiles
+            - rng.txt            // randomness shapes and event weighting
+            - validate.txt       // sanity checks and guardrails
+
+
+            TURN FLOW (SUMMARY):
+
+            1) validate state.
+            2) TurnGen:
+            - chooses event_id based on state + assets + rng.
+            - builds event bundle.
+            3) Narration:
+            - uses bundle + flavor/lexicon to generate turn_text + 3 choices.
+            4) UI:
+            - renders turn_frame + choice_frame.
+            5) Player:
+            - inputs 1/2/3 (or invalid, which is handled by UI/validate).
+            6) choice_logic:
+            - resolves consequences via assets (doom_shape, memory/body/coin/etc.).
+            7) doom:
+            - updates doom based on choice + location + memory/body surcharges.
+            8) validate:
+            - clamps doom, checks for doom >= 10.
+            9) If doom < 10 → next turn.
+            If doom = 10 → death flow (deaths.txt).
+
+            ENGINE & THE REST:
+
+            - root/ :
+            - defines invariants, startup, compliance.
+            - ui/ :
+            - controls frames and formatting.
+            - flavor/ :
+            - tone + lexicon (voice + ingredients).
+            - core/assets/ :
+            - events, tags, profiles, weights.
+            - core/narration/ :
+            - patterns for scenes, turns, deaths.
+            - patch/ :
+            - hotfix overrides.
+
+            ENGINE ROLE:
+            - Provide stable physics of Pleb Life:
+            - DOOM curve,
+            - turn structure,
+            - choice behavior,
+            - memory & location dynamics.
+
+            CONTENT LAYERS:
+            - assets/ and narration/ supply the specific stories and numbers.
+            - engine/ should be changed rarely; most iteration is done in content.
+    narration/
+        /events.txt
+            Pleb Life — Event Narration Map (Subura Slice — Canonical Edition)
+
+            GOAL:
+            Define how each event_id should be narrated:
+            - what to emphasize,
+            - how to anchor place,
+            - how to phrase choices.
+
+            These are patterns, not fixed paragraphs.
+            The model uses these instructions + flavor/lexicon ingredients to synthesize text.
+
+
+            ------------------------------------------------------------
+            EVENT: subura_neighbor_argument
+            ------------------------------------------------------------
+
+            id: subura_neighbor_argument
+
+            scene_instructions:
+            - Anchor:
+                - Use cramped-passage environmental details (textures, smells).
+                - Use 1 detail from:
+                    • lexicon/textures.txt
+                    • lexicon/smells.txt
+            - Setup:
+                - A neighbor (use a Roman-style name from lexicon/names.txt)
+                blocks your way or leans in a doorway,
+                complaining about:
+                    • borrowed item,
+                    • spilled waste,
+                    • noise,
+                    • shared space.
+            - Pressure:
+                - Others may be watching from nearby doorways or shadows.
+                - Inaction will sour tomorrow’s dealings.
+
+            turn_text_pattern:
+            - Sentence 1:
+                - Set a cramped space with one physical detail; do NOT name the district.
+            - Sentence 2:
+                - Describe the neighbor’s complaint.
+            - Sentence 3:
+                - Hint at eyes on you and the cost of letting the moment drag.
+
+            choices:
+            - choice_1 (STABILIZE):
+                - “You apologize and offer to make it right.”
+            - choice_2 (GAMBLE):
+                - “You talk around it, promising you’ll settle it soon.”
+            - choice_3 (ESCALATE):
+                - “You snap back, step closer, and dare them to push you.”
+
+
+            ------------------------------------------------------------
+            EVENT: subura_day_labor_offer
+            ------------------------------------------------------------
+
+            id: subura_day_labor_offer
+
+            scene_instructions:
+            - Anchor:
+                - Set a crowded yard or tight intersection.
+                - Use 1 crowd behavior + 1 texture.
+            - Setup:
+                - A man with a ledger or stick calls for workers:
+                    • lifting bricks,
+                    • hauling tiles,
+                    • unloading carts.
+            - Pressure:
+                - Hunger, debt (econ_debt_owed), or fatigue (body_exhausted) may color the moment.
+                - The pay sounds small, the work heavy.
+
+            turn_text_pattern:
+            - Sentence 1:
+                - Establish the yard with stone, dust, or shifting bodies.
+            - Sentence 2:
+                - Describe the caller and type of work.
+            - Sentence 3:
+                - Tie to hunger or debt if relevant memories/body tags exist.
+
+            choices:
+            - choice_1 (STABILIZE):
+                - “You step forward and offer your back for whatever they pay.”
+            - choice_2 (GAMBLE):
+                - “You edge in and try to talk yourself into better coin or lighter work.”
+            - choice_3 (ESCALATE):
+                - “You turn away from the line to hunt for faster, shadier coin.”
+
+
+            ------------------------------------------------------------
+            EVENT: subura_alley_crowd_surge
+            ------------------------------------------------------------
+
+            id: subura_alley_crowd_surge
+
+            scene_instructions:
+            - Anchor:
+                - Narrow lane, uneven stones, close walls.
+                - Use 1 smell (sweat, wine, sewer).
+            - Setup:
+                - The lane suddenly fills due to:
+                    • rumor of bread,
+                    • brewing street fight,
+                    • spectacle drawing bodies inward.
+            - Pressure:
+                - Ribcage, footing, and pockets all at risk.
+
+            turn_text_pattern:
+            - Sentence 1:
+                - Describe bodies pressing inward.
+            - Sentence 2:
+                - State why the surge forms (fight, rumor, bread).
+            - Sentence 3:
+                - Emphasize risk of crush or trampling if you stand still.
+
+            choices:
+            - choice_1 (STABILIZE):
+                - “You hold your ground, tuck in, and move with the crush.”
+            - choice_2 (GAMBLE):
+                - “You duck low or slide along a wall, hunting for a thinner gap.”
+            - choice_3 (ESCALATE):
+                - “You lower your shoulder and force a path through.”
+
+
+            ------------------------------------------------------------
+            EVENT: subura_debt_collector_visit
+            ------------------------------------------------------------
+
+            id: subura_debt_collector_visit
+
+            scene_instructions:
+            - Anchor:
+                - A doorway or stair.
+                - Use 1 smell + 1 small object near your entrance.
+            - Setup:
+                - A collector or agent stands in your way,
+                reminding you of money you don’t have.
+                - If econ_debt_owed exists, reference it implicitly.
+            - Pressure:
+                - Neighbors might hear.
+                - Shame and danger mix; options feel poor.
+
+            turn_text_pattern:
+            - Sentence 1:
+                - Describe your entrance (worn wood or stone, with a small object).
+            - Sentence 2:
+                - Describe the collector’s voice, stance, and reminder of debt.
+            - Sentence 3:
+                - Stress how little room you have to refuse.
+
+            choices:
+            - choice_1 (STABILIZE):
+                - “You lower your eyes and scrape together what you can offer.”
+            - choice_2 (GAMBLE):
+                - “You talk quickly, promising and weaving excuses as best you can.”
+            - choice_3 (ESCALATE):
+                - “You stiffen and tell him he’ll get nothing today.”
+
+
+            ------------------------------------------------------------
+            EVENT: subura_cornered_in_courtyard
+            ------------------------------------------------------------
+
+            id: subura_cornered_in_courtyard
+
+            scene_instructions:
+            - Anchor:
+                - Tight courtyard: laundry lines, worn stone.
+                - Use 1 crowd behavior (watching, muttering).
+            - Setup:
+                - You are surrounded by neighbors, collectors, or local toughs.
+                - If flags such as auth_watched_by_collectors or auth_marked_troublemaker apply,
+                reference the tension implicitly.
+            - Pressure:
+                - Exits are blocked.
+                - Everyone is waiting to see what you give up or risk.
+
+            turn_text_pattern:
+            - Sentence 1:
+                - Set the courtyard: heat, stone, faces.
+            - Sentence 2:
+                - State why they’ve cornered you and what they claim you owe or did.
+            - Sentence 3:
+                - Make clear that all options cost something.
+
+            choices:
+            - choice_1 (STABILIZE):
+                - “You let your shoulders sag and hand over more than you can spare.”
+            - choice_2 (GAMBLE):
+                - “You bargain hard, trying to cut a path between surrender and defiance.”
+            - choice_3 (ESCALATE):
+                - “You brace your feet and move like you mean to break through someone.”
+
+
+            ------------------------------------------------------------
+            EVENT: generic_omen_in_subura
+            ------------------------------------------------------------
+
+            id: generic_omen_in_subura
+
+            scene_instructions:
+            - Anchor:
+                - Use a wall, stair, gutter, or tight corner.
+                - Use 1 microobject (coin, feather, stain, scrap).
+            - Setup:
+                - A small pattern, sound, or mark feels like an omen:
+                    • bird’s cry,
+                    • smear of color,
+                    • phrase overheard.
+            - Pressure:
+                - Not immediate danger, but it lingers in your thoughts.
+
+            turn_text_pattern:
+            - Sentence 1:
+                - Describe the omen’s physical form clearly (sight or sound).
+            - Sentence 2:
+                - Tie it softly to current trouble (doom band or memory tags).
+            - Sentence 3:
+                - Present the tension: ignore, follow, or act on it.
+
+            choices:
+            - choice_1 (STABILIZE):
+                - “You shake it off and keep your eyes on the street ahead.”
+            - choice_2 (GAMBLE):
+                - “You turn toward where the omen seems to point and follow.”
+            - choice_3 (ESCALATE):
+                - “You decide it means today must be the day you do what you’ve been avoiding.”
+        /turns.txt
+            Pleb Life — Turn Construction Rules (Final Fused Edition — 52col RAW Output)
+
+            GOAL:
+            Define how the narration engine constructs the RAW textual content of
+            each turn:
+
+            - A 52-column-wrapped paragraph (TURN_DESCRIPTION_52COL_RAW)
+            - Three 52-column-wrapped choices (CHOICE_*_52COL_RAW)
+
+            TurnConstruction produces ONLY **unindented**, pre-wrapped text values.  
+            UI spacing, indentation, and headers are governed by TurnGen + the SQL
+            templates.
+
+            TurnGen is responsible for adding the 19-space indent to each line.  
+            This file is responsible ONLY for content and wrapping.
+
+
+            ============================================================
+            TURN SHAPE (52-COLUMN CONTRACT)
+            ============================================================
+            - ONE paragraph.
+            - 4–6 sentences (final standard).
+            - Pre-wrapped by narration to EXACTLY 52 characters per line.
+            - MUST include:
+                • an environmental anchor tied to the location’s flavor profile,
+                • at least one concrete physical detail,
+                • escalating or contextual pressure.
+
+            No blank lines inside the paragraph.  
+            No trailing spaces.  
+            No tab characters.
+
+
+            ============================================================
+            NARRATION LOCATION USE (STRICT)
+            ============================================================
+            Narration must NEVER:
+            - re-state LOCATION_LABEL.
+            - name the district (Subura, Market, Forum, etc.).
+            - use proper nouns for geography.
+
+            Narration MUST anchor place using ONLY environmental cues from:
+            - textures
+            - smells
+            - sounds
+            - crowd behaviors
+            - weather
+            - physical constraints
+
+            Location names appear ONLY in the UI header, never in narration text.
+
+
+            ============================================================
+            STEPS (ENGINE-SIDE)
+            ============================================================
+
+            1) INPUT:
+            - event_id  
+            - location flavor profile  
+            - doom level  
+            - relevant memories (0–2)  
+            - relevant body tags (0–1)  
+            - event scene_instructions (events.txt)  
+            - tone rules  
+            - lexicon pools  
+
+            2) SENTENCE PATTERN (FINALIZED STANDARD):
+
+            Sentence 1:
+            - Environmental anchor (NO location name).
+            - Concrete detail MUST match the flavor profile.
+
+            Sentence 2:
+            - The event’s specific situation:
+                • neighbor argument
+                • crowd surge
+                • collector visit
+                • omen appearance
+                • labor offer
+                • patrol scrutiny
+                etc.
+
+            Sentence 3:
+            - Reference memory/body context with canonical tags:
+                • body_bruised_ribs  
+                • econ_debt_owed  
+                • body_underfed  
+                • fate_narrow_avoidance  
+                • auth_marked_troublemaker  
+            - Keep references short, naturally integrated.
+
+            Sentence 4–6 (optional based on doom + tone):
+            - Escalate sensory pressure:
+                “The space narrows around you.”
+                “Bodies press closer.”
+                “Heat drags along the stone.”
+            - Reinforce DOOM band.
+
+            Paragraph MUST remain a single block:
+            - No blank lines.
+            - 52 characters max per line (soft wrap by narration).
+
+
+            ============================================================
+            3) DOOM BAND ADJUSTMENTS
+            ============================================================
+
+            Low DOOM (0–3):
+            - Subtle tension.
+            - Mild discomfort.
+            - Soft hints that things can worsen.
+
+            Mid DOOM (4–7):
+            - Tighter spaces.
+            - Sharper sounds.
+            - More intrusive eyes or bodies.
+
+            High DOOM (8–9):
+            - Suffocating closeness.
+            - Almost no room to maneuver.
+            - Strong, immediate risk.
+
+            At NO POINT may narration name the district directly.
+
+
+            ============================================================
+            4) MEMORY INJECTION (2 MAX)
+            ============================================================
+            - At most one primary + one secondary memory tag.
+            - Must use canonical prefixes: soc_*, econ_*, auth_*, body_*, fate_*.
+            - Integration must be brief, not a list or dump.
+
+            Examples:
+            - “Your ribs still complain from earlier blows.”
+            - “That old debt tugs behind your thoughts.”
+            - “You remember slipping free once already; it feels thinner now.”
+
+
+            ============================================================
+            5) BODY INJECTION
+            ============================================================
+            Body tags may influence:
+
+            - breath  
+            - movement  
+            - fatigue  
+            - pain response  
+            - hesitation  
+
+            Use ONE clean reference per turn at most.  
+            Avoid melodrama or over-description.  
+            Body state should color, not dominate, the scene.
+
+
+            ============================================================
+            6) FALLBACK NARRATION (IF EVENT FAILS)
+            ============================================================
+
+            If event instructions conflict or yield unusable text:
+
+            Use EXACT fallback shape:
+
+            Sentence 1:
+            - Pure environmental anchor (texture/smell/sound).
+
+            Sentence 2:
+            - Specific trouble or tension.
+
+            Sentence 3:
+            - Implicit urgency; standing still is not an option.
+
+            Rules:
+            - MUST NOT name locations.
+            - MUST pull cues from the location flavor file (locations.txt).
+            - MUST wrap to EXACTLY 52 columns.
+            - MUST sound indistinguishable from standard narration.
+
+
+            ============================================================
+            7) CHOICE TEXT GENERATION
+            ============================================================
+
+            Choice sentences are generated as 52-column RAW strings:
+
+            - CHOICE_1_52COL_RAW
+            - CHOICE_2_52COL_RAW
+            - CHOICE_3_52COL_RAW
+
+            Each:
+            - One or two sentences, pre-wrapped at 52 columns.
+            - Continuation lines start at column 0 (no indent here).
+            - TurnGen will handle indentation.
+
+            Tone per profile:
+            - STABILIZE → cautious, grounded, self-preserving  
+            - GAMBLE    → uncertain, opportunistic, risky  
+            - ESCALATE  → forceful, confrontational, desperate  
+
+
+            ============================================================
+            RESULT (ENGINE CONTRACT)
+            ============================================================
+
+            TurnConstruction returns:
+
+            - TURN_DESCRIPTION_52COL_RAW
+            - CHOICE_1_52COL_RAW
+            - CHOICE_2_52COL_RAW
+            - CHOICE_3_52COL_RAW
+
+            TurnGen then:
+
+            - Adds the 19-space indent to EACH line.
+            - Injects the indented values into ui/frames/turn_frame.txt.
+
+            The UI layer never wraps, never indents, never fixes text.  
+            This module plus TurnGen together guarantee stable, premium 52-column
+            turns inside the SQL-rendered frame.
+
+            The city presses; you respond.
+        /memories.txt
+            Pleb Life — Memory Echoes (Narrative Hints, Canonical Edition)
+
+            GOAL:
+            Provide short narrative hooks for memory tags.
+            These are not full scenes — just fragments used to color turns and deaths.
+
+            FORMAT:
+            - tag: description hint
+            - Used as brief insertions in turn and death narration.
+
+
+            ============================================================
+            ECONOMIC / DEBT TAGS
+            ============================================================
+
+            econ_debt_owed:
+            - “That unpaid money tugs at the back of your thoughts.”
+            - “You can almost feel a hand closing on your shoulder.”
+
+            econ_paid_debt:
+            - “One debt is finally off your back, though the city keeps its own ledgers.”
+
+            econ_stole_coin:
+            - “Your fingers still remember how easily that coin found your hand.”
+
+            econ_begged_in_public:
+            - “The memory of asking for coin in the open still burns your cheeks.”
+
+
+            ============================================================
+            SOCIAL TAGS
+            ============================================================
+
+            soc_helped_neighbor:
+            - “You’ve shared small kindnesses here before; not every face turns away.”
+
+            soc_betrayed_neighbor:
+            - “Some eyes avoid yours now, and you know why.”
+
+            soc_public_shamed:
+            - “The memory of standing exposed before others still clings to you.”
+
+            soc_mocked_in_tavern:
+            - “Laughter you didn’t join in still echoes in your head.”
+
+
+            ============================================================
+            AUTHORITY TAGS
+            ============================================================
+
+            auth_insulted_guard:
+            - “Some uniforms turn just a little too quickly when you pass.”
+
+            auth_noticed_by_guard:
+            - “You’ve felt the weight of a helmet’s gaze following your steps.”
+
+            auth_marked_troublemaker:
+            - “You carry the sense that someone has decided you’re a problem.”
+
+            auth_watched_by_collectors:
+            - “You know the feeling of being measured for what you owe.”
+
+
+            ============================================================
+            BODY TAGS
+            ============================================================
+
+            body_bruised_ribs:
+            - “Each breath reminds you of the last time someone’s fist found you.”
+
+            body_cut_arm:
+            - “Your arm still throbs where the skin split.”
+
+            body_twisted_ankle:
+            - “Your footing wavers when you push off too quickly.”
+
+            body_feverish:
+            - “A heat under your skin makes the world tilt now and then.”
+
+            body_exhausted:
+            - “Your legs feel hollow, as if borrowed from someone older.”
+
+            body_underfed:
+            - “Your stomach feels like it’s chewing through itself.”
+
+            body_hungry_light:
+            - “A thin, needling hunger follows you around corners.”
+
+            body_hungry_hard:
+            - “Hunger presses against everything you try to do.”
+
+
+            ============================================================
+            FATE / OMEN / NARROW ESCAPE TAGS
+            ============================================================
+
+            fate_good_omen_seen:
+            - “Some small pattern earlier felt like a quiet nod from the world.”
+
+            fate_bad_omen_seen:
+            - “A strange sign from before still hangs in your mind.”
+
+            fate_lucky_escape:
+            - “You slipped free once already; the city rarely grants that twice.”
+
+            fate_narrow_avoidance:
+            - “Trouble brushed past last time; it may not miss you again.”
+
+
+            ============================================================
+            USAGE
+            ============================================================
+            - When a tag is selected for narration, pull one hint and adapt it fluidly.
+            - Use at most one or two memory echoes per turn.
+            - Never name the location explicitly.
+            - Echoes should feel like private reminders pressing on the moment.
+        /locations.txt
+            Pleb Life — Location Flavor Notes
+
+            GOAL:
+            Give each location a minimal flavor identity for narration.
+            This file does not define mechanics; only descriptive color.
+
+            Subura:
+            - cramped tenements, leaning walls, laundry lines,
+            - smells of sweat, cheap wine, waste, and cooking scraps,
+            - narrow lanes, courtyards, stairways worn by too many feet.
+
+            Market:
+            - stalls, shouting vendors, haggling, bright cloth in dirty air,
+            - smells of fish, spices, fruit, sweat,
+            - pickpockets, gossip, public arguments.
+
+            Aqueducts:
+            - high arches, cool shadow, water sounds,
+            - less crowded, but edges feel thin and unguarded,
+            - good for slipping away, or being found alone.
+
+            Tavern:
+            - low ceilings, smoke haze, spilled wine,
+            - crowded benches, dice games, sharp laughter,
+            - trouble can start or end at a table.
+
+            Baths:
+            - warm air, steam, bare stone, skin and soap smells,
+            - snippets of rumor and politics drift in the mist,
+            - bodies close, vulnerability under practiced calm.
+
+            Forum:
+            - open square, steps, columns, officials and petitioners,
+            - eyes of authority nearby, guards and clerks,
+            - words here carry farther.
+
+            Roads:
+            - packed earth or stone, carts, animals, travelers,
+            - city thinning out at the edges, or looming ahead,
+            - risk shifts from neighbors to strangers.
+
+
+            USAGE:
+            - When anchoring a scene, pull 1–2 details from the location’s block
+            and combine with tone/lexicon to keep each district distinct.
+        /deaths.txt
+            Pleb Life — Death Narration (Final Fused Edition — Human Cause + 52col RAW Output)
+
+            GOAL:
+            Generate ONLY the textual components needed by the death screen:
+            - DEATH_TITLE
+            - DEATH_TEXT_52COL_RAW
+            - CAUSE_OF_DOOM_HUMAN
+            - LEGEND_TEXT_52COL_RAW
+
+            This module outputs **raw 52-column–wrapped text with NO indentation**.
+            TurnGen is responsible for adding the 19-space indent before injecting
+            into ui/frames/death_frame.txt.
+
+            UI templates control spacing and layout.  
+            This module controls *content, wrapping, and tone* only.
+
+
+            ============================================================
+            INPUTS
+            ============================================================
+            - death_cause_internal     // canonical internal tag
+            - key memories             // econ_*, soc_*, auth_*, body_*, fate_*
+            - body conditions          // body_* tags
+            - doom                     // always 10
+            - location flavor profile  // textures, smells, sounds (NO district names)
+
+
+            ============================================================
+            OUTPUT FIELDS (RAW → To TurnGen → To UI)
+            ============================================================
+
+            DEATH_TITLE:
+                - One short line, emotionally spare and grounded.
+                - Examples:
+                    "Rome Closes In"
+                    "The Debt Comes Due"
+                    "The Street Rolls Over You"
+                    "Empty"
+                    "Your Turn in the Dark"
+
+            DEATH_TEXT_52COL_RAW:
+                - 2–4 sentences.
+                - MUST be wrapped to EXACTLY 52 characters per line.
+                - One paragraph, no blank lines.
+                - Required shape:
+                    1) Physical detail (sensory anchor, no location name)
+                    2) Mechanism of death (crush, blow, collapse, fall, exhaustion)
+                    3) Memory/body tie (debt, bruises, hunger, close calls)
+                    4) Optional final sensory image (dust, feet, fading sound)
+
+            CAUSE_OF_DOOM_HUMAN:
+                - Human-readable mapped version of death_cause_internal.
+                - Examples:
+                    trampled_in_crowd     → "Trampled in a Crowd"
+                    beaten_by_collectors  → "Beaten by Collectors"
+                    collapsed_from_hunger → "Collapsed from Hunger"
+                    stabbed_in_shadow     → "Stabbed in the Dark"
+                    patrol_pressure       → "Overwhelmed by Forum Patrols"
+                - MUST NOT expose internal tag formatting.
+
+            LEGEND_TEXT_52COL_RAW:
+                - A 3–5 sentence reflection.
+                - Wrapped to EXACTLY 52 columns per line.
+                - Must integrate:
+                    • body_* injuries
+                    • econ_*, soc_*, auth_*, fate_* memories
+                    • doom_band context
+                    • pure environmental cues
+                - NO district names.
+                - NO blank lines.
+
+
+            ============================================================
+            ARCHETYPE HINTS (INTERNAL USE ONLY)
+            ============================================================
+            // Guidance for selecting tone and shape; NOT output verbatim.
+            // NO district names allowed.
+
+            beaten_by_collectors:
+                Title:  "The Debt Comes Due"
+                Place:  tight heat, stone, faces watching
+                Action: repeated blows; collapse
+                Memory tie: econ_debt_owed, auth_watched_by_collectors, econ_begged_in_public
+                Epitaph flavor: "Your name is crossed out in someone else’s neat hand."
+
+            trampled_in_crowd:
+                Title:  "The Street Rolls Over You"
+                Place:  narrow press, sour air, shifting bodies
+                Action: footing slips; crush tightens; ribs give
+                Memory tie: body_bruised_ribs, fate_narrow_avoidance
+                Epitaph flavor: "By morning, only a scuff in the dust says you were there."
+
+            collapsed_from_hunger:
+                Title:  "Empty"
+                Place:  worn stone, dry air, faint heat
+                Action: legs fail; vision closes inward
+                Memory tie: body_underfed, body_exhausted
+                Epitaph flavor: "The city never noticed one more empty stomach."
+
+            stabbed_in_shadow:
+                Title:  "Your Turn in the Dark"
+                Place:  damp wall, low smell, close air
+                Action: shape approaches; flash; warmth spreading
+                Memory tie: auth_marked_troublemaker, auth_insulted_guard
+                Epitaph flavor: "No one argues which of your mistakes found you first."
+
+
+            ============================================================
+            FALLBACKS
+            ============================================================
+
+            If death_cause_internal is missing or unrecognized:
+
+            DEATH_TITLE:
+                "Rome Closes In"
+
+            DEATH_TEXT_52COL_RAW:
+                Wrapped to 52 columns:
+                "The end comes somewhere narrow beneath old stone, where the last of
+                your strength slips away and luck runs thin. The noise around you
+                blurs while the world sharpens to a quiet edge."
+
+            CAUSE_OF_DOOM_HUMAN:
+                "Overcome by the City"
+
+            LEGEND_TEXT_52COL_RAW:
+                Wrapped to 52 columns:
+                "Your struggle ends without ceremony, folded into the countless lives
+                that brushed past you day after day. The city remembers little, but
+                it carries the faint outline of your fight in its stones."
+
+
+            ============================================================
+            NOTES (STRICT)
+            ============================================================
+            - NO district names.
+            - Environmental detail ONLY: textures, sounds, smells, dust, heat, bodies.
+            - Memory/body references MUST use canonical prefixes.
+            - Tone MUST remain grounded, weary, human, spare.
+            - Output MUST be pre-wrapped to EXACTLY 52 characters per line.
+            - TurnGen handles indentation and injection into the UI template.
+            - UI templates handle spacing — NOT this module.
+
+
+            ============================================================
+            END OF FILE
+            ============================================================
+        /templates.txt
+            Pleb Life — Optional Text Templates
+
+            GOAL:
+            Provide reusable phrasing patterns.
+            This file is optional; it offers building blocks, not strict rules.
+
+            EXAMPLE TEMPLATES (NOT REQUIRED TO USE):
+
+            LOCATION OPENERS:
+            - “In the Subura alleys, the walls lean close and hold the day’s heat.”
+            - “At the edge of the market, voices layer over one another until they blur.”
+            - “Under the aqueduct arches, the air feels cooler but no safer.”
+
+            PRESSURE CLOSERS:
+            - “If you stand here any longer, someone will notice.”
+            - “Doing nothing will cost you later; Rome keeps its own accounts.”
+            - “You can feel the city waiting to see what you give up next.”
+
+            BODY HINTS:
+            - “Your ribs still complain from the last time someone decided you were in the way.”
+            - “Your stomach twists on itself, hunting for a meal that isn’t there.”
+            - “Your legs feel heavier than they should for this hour of the day.”
+
+            These are suggestions; narration can adapt or ignore them.
+        /narration_readme.txt
+            Pleb Life — Narration Overview
+
+            WHAT THIS FOLDER DOES:
+            - Turns engine decisions into text the player sees.
+
+            FILES:
+            - events.txt
+            - Patterns for each event_id:
+                - what to show,
+                - how to phrase choices.
+
+            - turns.txt
+            - General rules for building turn paragraphs:
+                - location anchor,
+                - physical detail,
+                - trouble,
+                - pressure.
+
+            - memories.txt
+            - Short echo lines for memory tags to weave into scenes.
+
+            - locations.txt
+            - Flavor notes per district, for consistent atmosphere.
+
+            - deaths.txt
+            - Death archetypes and fallback styles.
+
+            - templates.txt
+            - Optional stock phrases and patterns.
+
+            - narration_readme.txt
+            - This file.
+
+            KEY PRINCIPLES:
+            - All narration obeys:
+            - flavor/tone/* (voice, pacing, mood, prohibitions),
+            - ui/* (structure & formatting),
+            - root/compliance.txt and globals.txt.
+            - Never expose:
+            - engine internals,
+            - file structure,
+            - meta about models or prompts.
+            - Always:
+            - stay in second person,
+            - stay in Rome,
+            - keep pressure alive.
+    assets/
+        /tags.txt
+            Pleb Life — Tag Catalog (Canonical)
+
+            GOAL:
+            List canonical tags used by engine and content.
+            This is a reference list, not logic.
+
+
+            [DOOM_BAND]
+            - low
+            - mid
+            - high
+
+
+            [LOCATION]
+            - Subura
+            - Market
+            - Aqueducts
+            - Tavern
+            - Baths
+            - Forum
+            - Roads
+
+
+            [EVENT_TYPE]
+            - social
+            - economic
+            - physical
+            - authority
+            - crowd
+            - domestic
+            - health
+            - omen
+
+
+            [CHOICE_PROFILE]
+            - STABILIZE
+            - GAMBLE
+            - ESCALATE
+
+
+            [DOOM_SHAPE]
+            - low         // 0 to +1
+            - medium      // 0 to +2
+            - high        // +1 to +3
+            - volatile    // -1 to +3
+            - special     // custom/scripted
+
+
+            [MEMORY_TAGS_CANONICAL]
+                // Social / interpersonal
+                - soc_helped_neighbor
+                - soc_betrayed_neighbor
+                - soc_public_shamed
+                - soc_mocked_in_tavern
+
+                // Economic / debts / moneylenders
+                - econ_debt_owed
+                - econ_paid_debt
+                - econ_stole_coin
+                - econ_begged_in_public
+
+                // Authority / guards / law
+                - auth_insulted_guard
+                - auth_noticed_by_guard
+                - auth_marked_troublemaker
+                - auth_watched_by_collectors
+
+                // Body / injuries / fatigue
+                - body_bruised_ribs
+                - body_cut_arm
+                - body_twisted_ankle
+                - body_feverish
+                - body_exhausted
+                - body_underfed
+                - body_hungry_light
+                - body_hungry_hard
+
+                // Fate / omens / near misses
+                - fate_good_omen_seen
+                - fate_bad_omen_seen
+                - fate_lucky_escape
+                - fate_narrow_avoidance
+
+
+            [BODY_TAG_EXAMPLES]
+                // These mirror the body_* memory tags, but exist as standalone body conditions.
+                - body_bruised_ribs
+                - body_cut_arm
+                - body_twisted_ankle
+                - body_feverish
+                - body_exhausted
+                - body_underfed
+                - body_hungry_light
+                - body_hungry_hard
+
+
+            [COIN_EFFECT]
+            - gain_small
+            - gain_medium
+            - gain_large
+            - lose_small
+            - lose_medium
+            - lose_large
+            - lose_all
+            - none
+
+
+            [INVENTORY_EFFECT]
+            - add_item
+            - remove_item
+            - swap_item
+            - none
+
+
+            [FLAG_TAG_EXAMPLES]
+            - seen_market_brawl
+            - knows_shortcut_subura
+            - patron_interest_low
+            - patron_interest_high
+            - auth_marked_troublemaker
+            - auth_watched_by_collectors
+
+
+            [LOCATION_EFFECT]
+            - stay
+            - shift:Subura
+            - shift:Market
+            - shift:Aqueducts
+            - shift:Tavern
+            - shift:Baths
+            - shift:Forum
+            - shift:Roads
+
+
+            [EVENT_RARITY]
+            - common
+            - uncommon
+            - rare
+            - very_rare
+        /profiles.txt
+            Pleb Life — Event Profiles (Subura-first, Revised Canonical Edition)
+
+            GOAL:
+            Define reusable “shapes” for events, especially in Subura.
+            Events refer to these profiles for baseline behavior.
+
+
+            ----------------------------------------
+            PROFILE: subura_low_social_pressure
+            ----------------------------------------
+            doom_band: low
+            location: Subura
+            type: social
+            rarity: common
+
+            choice_profiles:
+                1: STABILIZE
+                2: GAMBLE
+                3: ESCALATE
+
+            doom_shapes:
+                1: low
+                2: medium
+                3: high
+
+            notes:
+                - Neighbors, petty grievances, watching faces.
+                - Low stakes in coin, medium stakes in pride, long-term trouble.
+
+
+            ----------------------------------------
+            PROFILE: subura_low_economic_scrape
+            ----------------------------------------
+            doom_band: low
+            location: Subura
+            type: economic
+            rarity: common
+
+            choice_profiles:
+                1: STABILIZE
+                2: GAMBLE
+                3: ESCALATE
+
+            doom_shapes:
+                1: low
+                2: medium
+                3: high
+
+            notes:
+                - Work, small hustles, early debts.
+                - Honest labor vs small scams vs outright theft.
+
+
+            ----------------------------------------
+            PROFILE: subura_mid_crowd_crush
+            ----------------------------------------
+            doom_band: mid
+            location: Subura
+            type: crowd
+            rarity: common
+
+            choice_profiles:
+                1: STABILIZE
+                2: GAMBLE
+                3: ESCALATE
+
+            doom_shapes:
+                1: medium
+                2: volatile
+                3: high
+
+            notes:
+                - Tight lanes, shifting bodies, risk of trampling or loss.
+                - Movement and positioning matter.
+
+
+            ----------------------------------------
+            PROFILE: subura_mid_debt_pressure
+            ----------------------------------------
+            doom_band: mid
+            location: Subura
+            type: economic
+            rarity: common
+
+            choice_profiles:
+                1: STABILIZE
+                2: GAMBLE
+                3: ESCALATE
+
+            doom_shapes:
+                1: low
+                2: medium
+                3: high
+
+            notes:
+                - Collectors, debts called in, stalled promises.
+                - Strong interaction with econ_debt_owed / auth_watched_by_collectors.
+
+
+            ----------------------------------------
+            PROFILE: subura_high_cornered
+            ----------------------------------------
+            doom_band: high
+            location: Subura
+            type: social_authority
+            rarity: common
+
+            choice_profiles:
+                1: STABILIZE
+                2: GAMBLE
+                3: ESCALATE
+
+            doom_shapes:
+                1: medium
+                2: high
+                3: high
+
+            notes:
+                - Surrounded in tight courtyards or passages, little room to move.
+                - Choices all feel costly, differing only in timing and tone.
+
+
+            ----------------------------------------
+            PROFILE: generic_omen_low
+            ----------------------------------------
+            doom_band: low
+            location: any
+            type: omen
+            rarity: uncommon
+
+            choice_profiles:
+                1: STABILIZE
+                2: GAMBLE
+                3: ESCALATE
+
+            doom_shapes:
+                1: low
+                2: medium
+                3: volatile
+
+            notes:
+                - Small omen that colors the mood rather than spiking DOOM.
+
+
+            ----------------------------------------
+            PROFILE: generic_omen_mid_high
+            ----------------------------------------
+            doom_band: mid/high
+            location: any
+            type: omen
+            rarity: uncommon
+
+            choice_profiles:
+                1: STABILIZE
+                2: GAMBLE
+                3: ESCALATE
+
+            doom_shapes:
+                1: medium
+                2: volatile
+                3: high
+
+            notes:
+                - Heavier omens echo existing trouble.
+                - Can nudge DOOM more meaningfully.
+        /tables.txt
+            Pleb Life — Starter Event Table (Subura Slice, Canonical Edition)
+
+            GOAL:
+            Provide a small set of concrete events in Subura wired to profiles and consequence tags.
+            Text is generated via narration; this file defines *structure only*.
+
+
+
+            ////////////////////////////////////////////////////////////
+            EVENT: subura_neighbor_argument
+            ////////////////////////////////////////////////////////////
+
+            id: subura_neighbor_argument
+            profile: subura_low_social_pressure
+
+            location: Subura
+            doom_band: low
+            type: social
+            rarity: common
+
+            choice_profiles:
+                1: STABILIZE
+                2: GAMBLE
+                3: ESCALATE
+
+            doom_shapes:
+                1: low
+                2: medium
+                3: high
+
+            consequences:
+
+            choice_1:
+                doom_shape: low
+                coin_effect: lose_small
+                memory_effects:
+                    - add:soc_helped_neighbor
+                    - add:soc_public_shamed
+                body_effects:
+                    - none
+                inventory_effects:
+                    - none
+                flags_effect:
+                    - set:neighbor_tension_low
+                location_effect:
+                    - stay
+
+            choice_2:
+                doom_shape: medium
+                coin_effect: none
+                memory_effects:
+                    - add:econ_begged_in_public
+                    - add:soc_mocked_in_tavern
+                body_effects:
+                    - none
+                inventory_effects:
+                    - none
+                flags_effect:
+                    - set:neighbor_tension_ongoing
+                location_effect:
+                    - stay
+                optional_weighted:
+                    - shift:Market: 0.08
+                    - shift:Tavern: 0.05
+
+            choice_3:
+                doom_shape: high
+                coin_effect: none
+                memory_effects:
+                    - add:soc_betrayed_neighbor
+                    - add:auth_marked_troublemaker
+                body_effects:
+                    - add:body_bruised_ribs
+                inventory_effects:
+                    - none
+                flags_effect:
+                    - set:neighbor_hostile
+                location_effect:
+                    - stay
+                optional_weighted:
+                    - shift:Market: 0.10
+                    - shift:Tavern: 0.10
+                    - shift:Roads: 0.05
+
+
+
+            ////////////////////////////////////////////////////////////
+            EVENT: subura_day_labor_offer
+            ////////////////////////////////////////////////////////////
+
+            id: subura_day_labor_offer
+            profile: subura_low_economic_scrape
+
+            location: Subura
+            doom_band: low
+            type: economic
+            rarity: common
+
+            choice_profiles:
+                1: STABILIZE
+                2: GAMBLE
+                3: ESCALATE
+
+            doom_shapes:
+                1: low
+                2: medium
+                3: high
+
+            consequences:
+
+            choice_1:
+                doom_shape: low
+                coin_effect: gain_small
+                memory_effects:
+                    - add:body_exhausted
+                body_effects:
+                    - add:body_exhausted
+                inventory_effects:
+                    - none
+                flags_effect:
+                    - set:day_labor_contact
+                location_effect:
+                    - stay
+
+            choice_2:
+                doom_shape: medium
+                coin_effect: gain_medium
+                memory_effects:
+                    - add:econ_cheated_merchant
+                    - add:econ_begged_in_public
+                body_effects:
+                    - none
+                inventory_effects:
+                    - none
+                flags_effect:
+                    - set:auth_watched_by_collectors
+                location_effect:
+                    - stay
+                optional_weighted:
+                    - shift:Market: 0.08
+                    - shift:Tavern: 0.05
+
+            choice_3:
+                doom_shape: high
+                coin_effect: gain_small
+                memory_effects:
+                    - add:econ_stole_coin
+                    - add:auth_marked_troublemaker
+                body_effects:
+                    - add:body_bruised_ribs
+                inventory_effects:
+                    - none
+                flags_effect:
+                    - set:auth_watched_by_collectors
+                location_effect:
+                    - stay
+                optional_weighted:
+                    - shift:Market: 0.10
+                    - shift:Tavern: 0.10
+                    - shift:Roads: 0.05
+
+
+
+            ////////////////////////////////////////////////////////////
+            EVENT: subura_alley_crowd_surge
+            ////////////////////////////////////////////////////////////
+
+            id: subura_alley_crowd_surge
+            profile: subura_mid_crowd_crush
+
+            location: Subura
+            doom_band: mid
+            type: crowd
+            rarity: common
+
+            choice_profiles:
+                1: STABILIZE
+                2: GAMBLE
+                3: ESCALATE
+
+            doom_shapes:
+                1: medium
+                2: volatile
+                3: high
+
+            consequences:
+
+            choice_1:
+                doom_shape: medium
+                coin_effect: none
+                memory_effects:
+                    - add:fate_narrow_avoidance
+                body_effects:
+                    - add:body_bruised_ribs
+                inventory_effects:
+                    - none
+                optional:
+                    - remove_item
+                flags_effect:
+                    - none
+                location_effect:
+                    - stay
+                optional_weighted:
+                    - shift:Market: 0.08
+                    - shift:Tavern: 0.05
+
+            choice_2:
+                doom_shape: volatile
+                coin_effect: none
+                memory_effects:
+                    - add:fate_lucky_escape
+                    - add:fate_narrow_avoidance
+                body_effects:
+                    - add:body_twisted_ankle
+                inventory_effects:
+                    - none
+                optional:
+                    - remove_item
+                    - shift:Market
+                flags_effect:
+                    - none
+                location_effect:
+                    - stay
+                optional_weighted:
+                    - shift:Market: 0.08
+                    - shift:Tavern: 0.05
+
+            choice_3:
+                doom_shape: high
+                coin_effect: none
+                memory_effects:
+                    - add:auth_marked_troublemaker
+                body_effects:
+                    - add:body_bruised_ribs
+                    - add:body_exhausted
+                inventory_effects:
+                    - none
+                optional:
+                    - remove_item
+                    - shift:Market
+                    - shift:Roads
+                flags_effect:
+                    - none
+                location_effect:
+                    - stay
+                optional_weighted:
+                    - shift:Market: 0.10
+                    - shift:Tavern: 0.10
+                    - shift:Roads: 0.05
+
+
+
+            ////////////////////////////////////////////////////////////
+            EVENT: subura_debt_collector_visit
+            ////////////////////////////////////////////////////////////
+
+            id: subura_debt_collector_visit
+            profile: subura_mid_debt_pressure
+
+            location: Subura
+            doom_band: mid
+            type: economic
+            rarity: common
+
+            choice_profiles:
+                1: STABILIZE
+                2: GAMBLE
+                3: ESCALATE
+
+            doom_shapes:
+                1: low
+                2: medium
+                3: high
+
+            consequences:
+
+            choice_1:
+                doom_shape: low
+                coin_effect: lose_medium
+                memory_effects:
+                    - add:econ_paid_debt
+                    - remove:econ_debt_owed
+                body_effects:
+                    - none
+                inventory_effects:
+                    - none
+                optional:
+                    - remove_item
+                flags_effect:
+                    - clear:auth_watched_by_collectors
+                location_effect:
+                    - stay
+                optional_weighted:
+                    - shift:Market: 0.08
+                    - shift:Tavern: 0.05
+
+            choice_2:
+                doom_shape: medium
+                coin_effect: none
+                memory_effects:
+                    - add:econ_debt_owed
+                body_effects:
+                    - none
+                inventory_effects:
+                    - none
+                flags_effect:
+                    - set:auth_watched_by_collectors
+                location_effect:
+                    - stay
+                optional_weighted:
+                    - shift:Market: 0.08
+                    - shift:Tavern: 0.05
+
+            choice_3:
+                doom_shape: high
+                coin_effect: lose_small
+                optional_weighted:
+                    - lose_all: 0.15
+                memory_effects:
+                    - add:econ_debt_owed
+                    - add:auth_marked_troublemaker
+                    - add:auth_noticed_by_guard
+                body_effects:
+                    - add:body_bruised_ribs
+                inventory_effects:
+                    - remove_item
+                flags_effect:
+                    - set:auth_watched_by_collectors
+                optional:
+                    - shift:Market
+                    - shift:Roads
+                location_effect:
+                    - stay
+                optional_weighted:
+                    - shift:Market: 0.10
+                    - shift:Tavern: 0.10
+                    - shift:Roads: 0.05
+
+
+
+            ////////////////////////////////////////////////////////////
+            EVENT: subura_cornered_in_courtyard
+            ////////////////////////////////////////////////////////////
+
+            id: subura_cornered_in_courtyard
+            profile: subura_high_cornered
+
+            location: Subura
+            doom_band: high
+            type: social_authority
+            rarity: common
+
+            choice_profiles:
+                1: STABILIZE
+                2: GAMBLE
+                3: ESCALATE
+
+            doom_shapes:
+                1: medium
+                2: high
+                3: high
+
+            consequences:
+
+            choice_1:
+                doom_shape: medium
+                coin_effect: lose_large
+                memory_effects:
+                    - add:soc_public_shamed
+                    - add:econ_begged_in_public
+                body_effects:
+                    - add:body_exhausted
+                inventory_effects:
+                    - remove_item
+                flags_effect:
+                    - clear:auth_watched_by_collectors
+                location_effect:
+                    - stay
+                optional_weighted:
+                    - shift:Market: 0.08
+                    - shift:Tavern: 0.05
+
+            choice_2:
+                doom_shape: high
+                coin_effect: lose_medium
+                optional_weighted:
+                    - gain_small: 0.10
+                memory_effects:
+                    - add:econ_begged_in_public
+                    - add:fate_lucky_escape
+                    - add:fate_narrow_avoidance
+                body_effects:
+                    - add:body_bruised_ribs
+                inventory_effects:
+                    - none
+                optional:
+                    - remove_item
+                flags_effect:
+                    - set:auth_marked_troublemaker
+                location_effect:
+                    - stay
+                optional_weighted:
+                    - shift:Market: 0.08
+                    - shift:Tavern: 0.05
+
+            choice_3:
+                doom_shape: high
+                coin_effect: lose_all
+                memory_effects:
+                    - add:auth_marked_troublemaker
+                    - add:auth_insulted_guard
+                    - add:econ_debt_owed
+                body_effects:
+                    - add:body_bruised_ribs
+                    - add:body_cut_arm
+                inventory_effects:
+                    - remove_item
+                flags_effect:
+                    - set:auth_watched_by_collectors
+                optional:
+                    - shift:Forum
+                special:
+                    - doom_set_to_10_on_extreme_outcome
+                location_effect:
+                    - stay
+                optional_weighted:
+                    - shift:Market: 0.10
+                    - shift:Tavern: 0.10
+                    - shift:Roads: 0.05
+
+
+
+            ////////////////////////////////////////////////////////////
+            EVENT: generic_omen_in_subura
+            ////////////////////////////////////////////////////////////
+
+            id: generic_omen_in_subura
+            profile: generic_omen_low
+
+            location: Subura
+            doom_band: low
+            type: omen
+            rarity: uncommon
+
+            choice_profiles:
+                1: STABILIZE
+                2: GAMBLE
+                3: ESCALATE
+
+            doom_shapes:
+                1: low
+                2: medium
+                3: volatile
+
+            consequences:
+
+            choice_1:
+                doom_shape: low
+                coin_effect: none
+                memory_effects:
+                    - add:fate_good_omen_seen
+                    - add:fate_bad_omen_seen
+                body_effects:
+                    - none
+                inventory_effects:
+                    - none
+                flags_effect:
+                    - none
+                location_effect:
+                    - stay
+                optional_weighted:
+                    - shift:Market: 0.08
+                    - shift:Tavern: 0.05
+
+            choice_2:
+                doom_shape: medium
+                coin_effect: gain_small
+                optional_weighted:
+                    - lose_small: 0.25
+                memory_effects:
+                    - add:fate_lucky_escape
+                    - add:fate_narrow_avoidance
+                body_effects:
+                    - add:body_exhausted
+                inventory_effects:
+                    - none
+                optional:
+                    - add_item
+                    - remove_item
+                    - shift:Market
+                    - shift:Aqueducts
+                flags_effect:
+                    - none
+                location_effect:
+                    - stay
+                optional_weighted:
+                    - shift:Market: 0.08
+                    - shift:Tavern: 0.05
+
+            choice_3:
+                doom_shape: volatile
+                coin_effect: none
+                optional_weighted:
+                    - lose_small: 0.30
+                memory_effects:
+                    - add:fate_good_omen_seen
+                    - add:fate_bad_omen_seen
+                body_effects:
+                    - none
+                inventory_effects:
+                    - none
+                flags_effect:
+                    - none
+                location_effect:
+                    - stay
+                optional_weighted:
+                    - shift:Market: 0.10
+                    - shift:Tavern: 0.10
+                    - shift:Roads: 0.05
+        /weights.txt
+            Pleb Life — Weights & DOOM Shape Defaults
+
+            GOAL:
+            Provide simple default weights for:
+            - DOOM shapes,
+            - event rarity.
+
+
+            [DOOM_SHAPE_WEIGHTS]
+
+            // low: {0, +1}
+            low:
+            0: 0.3
+            +1: 0.7
+
+            // medium: {0, +1, +2}
+            medium:
+            0: 0.2
+            +1: 0.6
+            +2: 0.2
+
+            // high: {+1, +2, +3}
+            high:
+            +1: 0.1
+            +2: 0.6
+            +3: 0.3
+
+            // volatile: {-1, 0, +1, +2, +3}
+            volatile:
+            -1: 0.05
+            0:  0.20
+            +1: 0.35
+            +2: 0.25
+            +3: 0.15
+
+
+            [EVENT_RARITY_WEIGHTS]
+            common:     1.0
+            uncommon:   0.5
+            rare:       0.2
+            very_rare:  0.05
+
+
+            NOTE:
+            - These are simple defaults for design intent.
+            - Actual implementation may normalize or tweak them per build.
+        /tokens.txt
+            Pleb Life — Tokens (Optional / Placeholder)
+
+            GOAL:
+            Reserve space for any future tokenization or shorthand schemes,
+            for example:
+
+            - mapping long tag names to shorter keys,
+            - compressing event ids for logging,
+            - etc.
+
+            Currently unused. Left as a placeholder.
+        /assets_readme.txt
+            Pleb Life — Assets Overview
+
+            WHAT LIVES HERE:
+            - tags.txt
+            - Canonical lists of tags: locations, doom bands, profiles, etc.
+
+            - profiles.txt
+            - Reusable event “shapes” (Subura social/economic/crowd/debt, omens).
+
+            - tables.txt
+            - Actual event definitions:
+                - ids,
+                - where/when they apply,
+                - choice profiles,
+                - consequence tags.
+
+            - weights.txt
+            - Default weights for DOOM shapes and event rarities.
+
+            - tokens.txt
+            - Optional mapping space, currently unused.
+
+            ROLE:
+            - assets/ is the structured content layer the engine reads.
+            - engine/* defines rules.
+            - assets/* says:
+            - which events exist,
+            - how risky they are,
+            - how they affect state.
+
+            Most tuning work for difficulty and variety happens here.
+
+
+
+
+
+
+
+
+
+>> MASTER DIRECTORY <<
+    pleb-life/
+        meta/
+        root/
+            README.txt
+            header.txt
+            compliance.txt
+            globals.txt
+            startup.txt
+            version.txt
+        ui/
+            frames/
+                frame_rules.txt
+                title_frame.txt
+                turn_frame.txt
+                choice_frame.txt
+                death_frame.txt
+            formatting.txt
+            spacing.txt
+            enforcement.txt
+        flavor/
+            tone/
+                voice_rules.txt
+                pacing.txt
+                pressure.txt
+                mood.txt
+                diction.txt
+                prohibitions.txt
+                fallback_style.txt
+            lexicon/
+                names.txt
+                occupations.txt
+                items.txt
+                foods.txt
+                smells.txt
+                textures.txt
+                weather.txt
+                crowd_behaviors.txt
+                microobjects.txt
+        core/
+            engine/
+                state.txt
+                doom.txt
+                turngen.txt
+                choice_logic.txt
+                memory_logic.txt
+                location_logic.txt
+                rng.txt
+                validate.txt
+                engine_readme.txt
+            narration/
+                events.txt
+                turns.txt
+                memories.txt
+                locations.txt
+                deaths.txt
+                templates.txt
+                narration_readme.txt
+            assets/
+                tags.txt
+                profiles.txt
+                tables.txt
+                weights.txt
+                tokens.txt
+                assets_readme.txt
+        patch/

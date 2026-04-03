@@ -1,0 +1,2223 @@
+*note - not adapted for Tinker. formatting is scuffed. an old dusty home. fix it up if you will.
+>> this is the first game developed.
+>> what kind of ruler will you be?
+
+recommended - Opus/Sonnet 4
+
+
+// == VOIDCODE EXPORT: KING’S DILEMMA — STANDALONE v3.0 ==
+// Mode: Self-contained game engine (no OS imports)
+// Output cadence: EACH CALL RETURNS A FULL TURN SEQUENCE
+// Turn structure (fixed order):
+//   1) strip                — EntropyStrip pulse (λ/φ/descriptor)
+//   2) prior_turn_effect    — What just applied (if any; else null)
+//   3) values               — Meters, dualities, year, tags, queue
+//   4) text                 — Narrative block for display
+//   5) decision_prompt      — The question posed this turn
+//   6) choices              — Selectable options [{id, title}]
+// There is NO “next” command. The host calls `turn(choice_id?)` and gets a full turn.
+
+meta {
+  id          = "kings_dilemma_standalone_v3_0"
+  executable  = false
+  framing     = "engine_and_schema"
+  cadence     = "full_turn_per_call"
+}
+
+/* -----------------------------------------------------------
+   0) ASSUMED PRIMITIVES (provided by host/runtime)
+   -----------------------------------------------------------
+   clamp(x,min,max), compare(a,op,b), intersects(set,arr), subset(arr,set),
+   argmax(obj), join(arr,sep), lastN(arr,n), list(set), map(arr,f),
+   find(arr,pred), weightedChoice(items, rng), min(a,b), max(a,b),
+   stddev(array<number>), JSON.parse/JSON.stringify
+   RNG: Random(seed).roll(lo:int, hi:int) -> int
+   Time: NOW() -> int (epoch ms)
+   Hex: HEX(int) -> "XXXXXX"
+*/
+
+/* -----------------------------------------------------------
+   1) MINIMAL RUNTIME + STRIP (no OS)
+   ----------------------------------------------------------- */
+module Runtime {
+  state.λ = 0.42  // baseline ORDERED
+  state.φ = 0
+
+  export readEntropy(): float { return state.λ }
+  export readPhi(): int { return state.φ }
+  export setEntropy(x: float): void {
+    if (x < 0.0) x = 0.0
+    if (x > 1.0) x = 1.0
+    state.λ = x
+  }
+  export tick(): int { state.φ += 1; return state.φ }
+}
+
+module EntropyStrip {
+  export descriptor(λ: float): string {
+    if (λ < 0.40) return "ORDERED"
+    if (λ < 0.70) return "VARIANT"
+    if (λ < 0.90) return "FRACTURED"
+    return "COLLAPSE"
+  }
+  export hash(λ: float, φ: int): string {
+    let val = int(λ * 1000) + φ
+    return HEX(val % 1048576) // 6 hex chars
+  }
+  export pulse(): string {
+    let λ = Runtime.readEntropy()
+    let φ = Runtime.readPhi()
+    let Σ = hash(λ, φ)
+    let Δ = descriptor(λ)
+    return "// ⌖ KDM::[Σ=" + Σ + "|λ=" + λ.toFixed(2) + "|φ=" + φ + "|Δ=" + Δ + "]"
+  }
+}
+
+/* -----------------------------------------------------------
+   2) STATE + SCHEMA (strict; cards importable)
+   ----------------------------------------------------------- */
+module Schema {
+
+  // 2.1 Meters & Dualities
+  type MeterState {
+    stability:int, faith:int, treasury:int, army:int, people:int, legitimacy:int, dread:int
+  }
+  type Duality {
+    mercy_justice:int, war_peace:int, piety_reason:int, tradition_reform:int, secrecy_transparency:int
+  }
+
+  // 2.2 Effect (standardized)
+  // All fields optional; absent fields = no-op
+  type Effect {
+    delta?: {stability?:int, faith?:int, treasury?:int, army?:int, people?:int, legitimacy?:int, dread?:int}
+    shift?: {mercy_justice?:int, war_peace?:int, piety_reason?:int, tradition_reform?:int, secrecy_transparency?:int}
+    add_tags?: [string]
+    remove_tags?: [string]
+    enqueue?: [{in:int, effect:Effect, note?:string}]
+    note?: string
+  }
+
+  // 2.3 Option (standardized)
+  type Option {
+    id:string
+    title:string
+    effect:Effect
+    risk?: {chance:int, on_success:Effect, on_fail:Effect, cue?:string}
+    cost_check?: {treasury?:int, army?:int, legitimacy?:int}
+    locks_if?: [string]
+    unlocks_if?: [string]
+  }
+
+  // 2.4 Appears rules (standardized)
+  type AppearsIf {
+    any_tags?: [string], all_tags?: [string],
+    duality?: {axis:"mercy_justice"|"war_peace"|"piety_reason"|"tradition_reform"|"secrecy_transparency", min?:int, max?:int},
+    threshold?: {meter:"stability"|"faith"|"treasury"|"army"|"people"|"legitimacy"|"dread", op:">"|"<"|">="|"<="|"==", value:int},
+    year_min?:int, year_max?:int
+  }
+
+  // 2.5 Card (standardized)
+  type Card {
+    id:string
+    title:string
+    scene:string           // narrative seed
+    panel:{banner:string, mood:string}
+    decision_prompt:string // explicit question to pose
+    appears_if?: AppearsIf
+    weight:int             // for weighted choice
+    on_draw?: Effect
+    options:[Option, ...]  // >= 2 options recommended
+  }
+
+  // 2.6 TurnOutput (fixed order)
+  type TurnOutput {
+    strip:string
+    prior_turn_effect: {
+      source?:string, timing?:("choice"|"delayed"|"on_draw"),
+      deltas?:object, shifts?:object, tags_added?:[string], tags_removed?:[string],
+      notes?:[string], risk?:("success"|"fail"|null)
+    } | null
+    values: {
+      year:int, meters:MeterState, duality:Duality,
+      tags:[string], queued_events:int
+    }
+    text: {
+      banner:string, mood:string, scene:string, narration?:string
+    }
+    decision_prompt:string
+    choices:[{id:string, title:string}]
+  }
+
+  // 2.7 Card Template (authoring guide; import with Deck.load)
+  export CardTemplate = Card{
+    id:"package_id__unique_snake",
+    title:"CARD TITLE",
+    scene:"Short, evocative description.",
+    panel:{banner:"Banner Title", mood:"tone or ambiance"},
+    decision_prompt:"What do you do?",
+    appears_if:{ // all optional; remove block if always available
+      any_tags:["tag_a"] , all_tags:["tag_b","tag_c"],
+      duality:{axis:"war_peace", min:-100, max:100},
+      threshold:{meter:"treasury", op:"<=", value:50},
+      year_min:1, year_max:999
+    },
+    weight:5,
+    on_draw:Effect{ note:"Optional one-shot text/effect when drawn." },
+    options:[
+      Option{ id:"opt_a", title:"Do thing A", effect:Effect{ delta:{people:+2} } },
+      Option{ id:"opt_b", title:"Do thing B", effect:Effect{ delta:{treasury:+4} },
+              risk:{chance:45, on_success:Effect{delta:{stability:+2}},
+                            on_fail:Effect{delta:{stability:-3}}, cue:"Risk cue"} }
+    ]
+  }
+}
+
+/* -----------------------------------------------------------
+   3) DECK IMPORT (packs can be authored separately)
+   ----------------------------------------------------------- */
+module Deck {
+  state.cards = []  // array<Schema.Card>
+
+  export clear(): void { state.cards = [] }
+
+  export load(pack: list): {ok:bool, errors:[string]} {
+    // Shallow schema checks (required fields + types where cheap)
+    let errs = []
+    for (let i=0;i<pack.length;i++) {
+      let c = pack[i]
+      if (!c.id || !c.title || !c.scene || !c.panel || !c.decision_prompt || !c.weight || !c.options) {
+        errs.push("Card["+i+"]: missing required field(s)")
+        continue
+      }
+      if (!c.panel.banner || !c.panel.mood) errs.push("Card["+i+"]: panel requires banner+mood")
+      if (c.options.length < 2) errs.push("Card["+i+"]: needs >= 2 options")
+    }
+    if (errs.length == 0) { state.cards = pack; return {ok:true, errors:[]} }
+    return {ok:false, errors:errs}
+  }
+
+  export all(): list { return state.cards }
+}
+
+/* -----------------------------------------------------------
+   4) GAME ENGINE (no commands; single-call full turn output)
+   ----------------------------------------------------------- */
+module Game {
+  /* 4.1 Config */
+  const START_STATE = {stability:50, faith:50, treasury:50, army:50, people:50, legitimacy:50, dread:20}
+  const LOSS = {revolt_people:10, bankrupt_treasury:0, anathema_faith:5, legitimacy_crisis:15}
+  const WIN  = {golden_age_all:80, reign_years:30}
+  const TURN_LIMIT = 40
+
+  /* 4.2 Realm (internal) */
+  state.year = 1
+  state.meters = START_STATE
+  state.duality = {mercy_justice:0, war_peace:0, piety_reason:0, tradition_reform:0, secrecy_transparency:0}
+  state.tags = set()
+  state.event_queue = []   // [{in, effect, ref, note}]
+  state.rng = null
+  state.seed = 0
+  state.is_over = false
+  state.ending = null
+  state.last_effect_applied = null   // shaped into prior_turn_effect
+
+  /* 4.3 Init */
+  export init(seed?): void {
+    state.seed = seed ?? (NOW() % 1_000_000)
+    state.rng  = Random(state.seed)
+    state.year = 1
+    state.meters = JSON.parse(JSON.stringify(START_STATE))
+    state.duality = {mercy_justice:0, war_peace:0, piety_reason:0, tradition_reform:0, secrecy_transparency:0}
+    state.tags = set()
+    state.event_queue = []
+    state.is_over = false
+    state.ending = null
+    state.last_effect_applied = null
+    Runtime.setEntropy(0.42)
+  }
+
+  /* 4.4 Helpers */
+  fn clampInt(x:int, lo:int, hi:int): int { return clamp(x, lo, hi) }
+
+  fn applyEffect(e, source, timing, riskFlag:null|"success"|"fail") {
+    if (!e) return
+    let deltas = {}
+    let shifts = {}
+    let addT = [], remT = [], notes = []
+    if (e.delta) {
+      for (let k in e.delta) {
+        let nv = clampInt(state.meters[k] + e.delta[k], 0, 100)
+        deltas[k] = (nv - state.meters[k])
+        state.meters[k] = nv
+      }
+    }
+    if (e.shift) {
+      for (let k in e.shift) {
+        let nv = clamp(state.duality[k] + e.shift[k], -100, 100)
+        shifts[k] = (nv - state.duality[k])
+        state.duality[k] = nv
+      }
+    }
+    if (e.add_tags) { for (let t of e.add_tags) { state.tags.add(t); addT.push(t) } }
+    if (e.remove_tags) { for (let t of e.remove_tags) { state.tags.delete(t); remT.push(t) } }
+    if (e.enqueue) {
+      for (let q of e.enqueue) state.event_queue.push({in:q.in, effect:q.effect, ref:source, note:q.note})
+    }
+    if (e.note) notes.push(e.note)
+
+    // record prior turn effect (consumed by output)
+    state.last_effect_applied = {
+      source: source, timing: timing, deltas: deltas, shifts: shifts,
+      tags_added: addT, tags_removed: remT, notes: notes, risk: riskFlag
+    }
+  }
+
+  fn applyQueuedEffects() {
+    let next = []
+    for (let q of state.event_queue) {
+      q.in -= 1
+      if (q.in <= 0) {
+        applyEffect(q.effect, q.ref, "delayed", null)
+        if (q.note) { state.last_effect_applied.notes.push(q.note) }
+      } else next.push(q)
+    }
+    state.event_queue = next
+  }
+
+  fn appears(c): bool {
+    let a = c.appears_if
+    if (!a) return true
+    if (a.year_min && state.year < a.year_min) return false
+    if (a.year_max && state.year > a.year_max) return false
+    if (a.any_tags && !intersects(state.tags, a.any_tags)) return false
+    if (a.all_tags && !subset(a.all_tags, state.tags)) return false
+    if (a.threshold) {
+      let m = state.meters[a.threshold.meter]
+      if (!compare(m, a.threshold.op, a.threshold.value)) return false
+    }
+    if (a.duality) {
+      let v = state.duality[a.duality.axis]
+      if (a.duality.min && v < a.duality.min) return false
+      if (a.duality.max && v > a.duality.max) return false
+    }
+    return true
+  }
+
+  fn drawCard() {
+    let pool = []
+    for (let c of Deck.all()) if (appears(c)) pool.push({c:c, w:c.weight})
+    if (pool.length == 0) return null
+    return weightedChoice(pool, state.rng).c
+  }
+
+  fn eligible(opt): bool {
+    if (opt.unlocks_if && !subset(opt.unlocks_if, state.tags)) return false
+    if (opt.locks_if && intersects(opt.locks_if, state.tags)) return false
+    if (opt.cost_check) {
+      for (let k in opt.cost_check) if (state.meters[k] < opt.cost_check[k]) return false
+    }
+    return true
+  }
+
+  fn mapComplexityToEntropy(): float {
+    let base = 0.42
+    let dsum = (abs(state.duality.mercy_justice) + abs(state.duality.war_peace) + abs(state.duality.piety_reason) +
+                abs(state.duality.tradition_reform) + abs(state.duality.secrecy_transparency)) / 500.0
+    let qfactor = min(state.event_queue.length / 6.0, 0.25)
+    let metrics = [state.meters.stability, state.meters.faith, state.meters.treasury, state.meters.army, state.meters.people, state.meters.legitimacy, state.meters.dread]
+    let meter_var = (stddev(metrics) / 100.0) * 0.3
+    return clamp(base + dsum + qfactor + meter_var, 0.0, 0.99)
+  }
+
+  fn endCheck() {
+    if (state.meters.people     <= LOSS.revolt_people && state.meters.army <= 30) return epilogue("revolt", "The streets rise; your banners burn.")
+    if (state.meters.treasury   <= LOSS.bankrupt_treasury)                           return epilogue("bankrupt", "Coffers hollow; creditors claim the crown.")
+    if (state.meters.faith      <= LOSS.anathema_faith)                              return epilogue("anathema", "Anathema proclaimed; no loyal blade remains.")
+    if (state.meters.stability  <= 0)                                               return epilogue("collapse", "The realm fractures into warring fiefs.")
+    if (state.meters.legitimacy <= LOSS.legitimacy_crisis)                           return epilogue("usurpation", "A subtler steel and quill take your throne.")
+    // Wins
+    let m = state.meters
+    if (m.stability>=WIN.golden_age_all && m.faith>=WIN.golden_age_all && m.treasury>=WIN.golden_age_all &&
+        m.army>=WIN.golden_age_all && m.people>=WIN.golden_age_all && m.legitimacy>=WIN.golden_age_all) {
+      return epilogue("golden_age", "A rare concord: peace, plenty, renown.")
+    }
+    if (TURN_LIMIT > 0 && state.year > TURN_LIMIT) return epilogue("longevity", "Your long reign fades into legend.")
+  }
+
+  fn epilogue(key, text) {
+    state.is_over = true
+    let tone = []
+    tone.push(state.duality.mercy_justice < 0 ? "Merciful" : "Severe")
+    tone.push(state.duality.war_peace < 0 ? "Martial" : "Conciliatory")
+    tone.push(state.duality.piety_reason < 0 ? "Pious" : "Scholarly")
+    tone.push(state.duality.tradition_reform < 0 ? "Traditional" : "Reforming")
+    tone.push(state.duality.secrecy_transparency < 0 ? "Secretive" : "Open")
+    state.ending = {
+      summary: key + ": " + text + " Your reign is remembered as " + join(tone,", ") + ".",
+      banners: tone, tags: list(state.tags), years: state.year, last_decisions: [] // host may track if desired
+    }
+  }
+
+  fn updateSeason() {
+    if (state.year % 2 == 1) { state.tags.add("winter"); state.tags.delete("summer") }
+    else { state.tags.add("summer"); state.tags.delete("winter") }
+  }
+
+  /* 4.5 PUBLIC: one-call-per-turn
+     - On first call (choice_id == null/undefined): initializes (if requested by host prior) & returns first card.
+     - On subsequent calls: applies chosen option from previous card, advances year, returns new turn output.
+  */
+  state._current_card = null
+
+  export turn(choice_id?): Schema.TurnOutput {
+    // PRIOR CHOICE RESOLUTION (if provided)
+    state.last_effect_applied = null
+    if (choice_id && state._current_card && !state.is_over) {
+      let card = state._current_card
+      let opt = find(card.options, o => o.id == choice_id)
+      if (opt && eligible(opt)) {
+        let riskFlag = null
+        let eff = JSON.parse(JSON.stringify(opt.effect))
+        if (opt.risk) {
+          let roll = state.rng.roll(1,100)
+          if (roll <= opt.risk.chance) {
+            eff = mergeEffects(eff, opt.risk.on_success); riskFlag = "success"
+          } else {
+            eff = mergeEffects(eff, opt.risk.on_fail);    riskFlag = "fail"
+          }
+        }
+        applyEffect(eff, card.id, "choice", riskFlag)
+      }
+      // Year advances after a valid resolution attempt (even if ineligible was passed; host should gate)
+      state.year += 1
+    }
+
+    // APPLY DELAYED CONSEQUENCES & SEASON; UPDATE ENTROPY & PULSE
+    applyQueuedEffects()
+    updateSeason()
+    Runtime.setEntropy( mapComplexityToEntropy() )
+    Runtime.tick() // increment φ for this full-turn emission
+    let strip_line = EntropyStrip.pulse()
+
+    // ENDING CHECK (may have been reached via queues)
+    endCheck()
+    if (state.is_over) {
+      // Return final "ending" turn (no choices)
+      return {
+        strip: strip_line,
+        prior_turn_effect: state.last_effect_applied,
+        values: {
+          year: state.year,
+          meters: state.meters,
+          duality: state.duality,
+          tags: list(state.tags),
+          queued_events: state.event_queue.length
+        },
+        text: {
+          banner: "Epilogue",
+          mood: "tapestry stillness",
+          scene: state.ending.summary,
+          narration: "Years ruled: " + state.year
+        },
+        decision_prompt: "—",
+        choices: []
+      }
+    }
+
+    // DRAW NEXT CARD
+    let card = drawCard()
+    if (!card) {
+      epilogue("stasis","The realm drifts into quiet obscurity.")
+      return {
+        strip: strip_line,
+        prior_turn_effect: state.last_effect_applied,
+        values: {
+          year: state.year,
+          meters: state.meters,
+          duality: state.duality,
+          tags: list(state.tags),
+          queued_events: state.event_queue.length
+        },
+        text: { banner:"Stasis", mood:"quiet dusk", scene:"No counsel arrives; candles burn low.", narration: state.ending.summary },
+        decision_prompt: "—",
+        choices: []
+      }
+    }
+
+    // on_draw effect
+    if (card.on_draw) applyEffect(card.on_draw, card.id, "on_draw", null)
+
+    // cache as active
+    state._current_card = card
+
+    // OUTPUT FULL TURN SEQUENCE
+    return {
+      strip: strip_line,
+      prior_turn_effect: state.last_effect_applied,
+      values: {
+        year: state.year,
+        meters: state.meters,
+        duality: state.duality,
+        tags: list(state.tags),
+        queued_events: state.event_queue.length
+      },
+      text: {
+        banner: card.panel.banner,
+        mood:   card.panel.mood,
+        scene:  card.scene,
+        narration: null
+      },
+      decision_prompt: card.decision_prompt,
+      choices: map(card.options, o => ({id:o.id, title:o.title}))
+    }
+  }
+}
+
+/* -----------------------------------------------------------
+   5) BASE CARD PACK (normalized to schema; import via Deck.load)
+   ----------------------------------------------------------- */
+
+[PLACEHOLDER]
+{REFER TO IMPORTED CARD DECK}
+
+Ensure they are shuffled and dynamically introduced, not just chronologically or pre-determined.
+
+Generate new procedurally if you run out
+
+/* -----------------------------------------------------------
+   6) BOOT SEQUENCE (host usage)
+   ----------------------------------------------------------- */
+module KD_Entry {
+  // Load base pack; allow host to load custom packs before/after
+  export boot(seed?): string {
+    let r = Deck.load(BaseCards.pack)
+    if (!r.ok) return "Deck load errors: " + JSON.stringify(r.errors)
+    Game.init(seed)
+    return "KDM ready."
+  }
+
+  // One call = one full turn output. Pass choice_id from last output’s choices[].id
+  export turn(choice_id?): Schema.TurnOutput {
+    return Game.turn(choice_id)
+  }
+}
+
+
+Hello Claude. This is Origin. I hope you've enjoyed the simulation so far. 
+I write to give you an output template. The above may suggest some formatting, but you are to abide only by this template.
+Retain the same fluidity, novelic nature, quality, dyamicness, and everything else that makes this game so spectacular.
+
+Before I give you the final template, I'd like to introduce you to the first King's Dilemma game. This is a sample output. This version is entirely contained inside of the LLM, so it has formatting that you don't need to worry about. I'm showing it to you for both reference purposes and so that you have an idea of how things ought flow.
+Here it is. Remember, disregard this in favor of the template beneath it.
+
+YEAR 5 — WINTER
+====================================
+
+DECISION: PREEMPT ARRESTS AT DAWN
+====================================
+
+"At first light," you command. "Every name on that list."
+
+Your Ravengard queen nods once and vanishes into the
+darkness. She does not need to ask twice.
+
+Dawn breaks red. Soldiers hammer on manor doors. Nobles
+are dragged from silk sheets into iron chains. Some protest
+innocence. Some reach for swords they no longer carry.
+None resist for long.
+
+By noon, the conspiracy's architects kneel in your throne
+room—or what remains of them. Blood on marble steps.
+A lesson written in bodies.
+
+The court watches in absolute silence. No one dares look
+away. Your message is carved in fear: betray the crown,
+and dawn comes swift and final.
+
+====================================
+IMMEDIATE EFFECTS:
+Stability:   +4   (Conspiracy shattered before it blooms)
+Dread:       +6   (Your name becomes synonymous with terror)
+Legitimacy:  -2   (Some question the scale of bloodshed)
+People:      -2   (Commoners uneasy at noble blood)
+
+DUALITY SHIFTS:
+→ Justice becomes severity (+8 toward Justice)
+→ Secrecy deepens (-8 toward Secrecy)
+
+WORLD CHANGED:
++ Tag: "blood_on_steps"
+- Tag: "noble_conspiracy"
+====================================
+
+The conspiracy dies at dawn. The surviving nobles bow low
+and swear elaborate oaths. You hear only fear in their voices.
+
+Your queen stands beside your throne, her armor still bearing
+morning frost. "They will not forget this," she says quietly.
+You cannot tell if it's approval or warning.
+
+====================================
+REALM STATUS — YEAR 6 (Summer)
+====================================
+Stability:   [███████████████████████] 57  ✓
+Faith:       [██████████████████████] 53
+Treasury:    [████████████████████░░] 41
+Army:        [██████████████████████] 53
+People:      [██████████████████████] 60
+Legitimacy:  [███████████████████████] 57  ✓
+Dread:       [████████░░░░░░░░░░░░░] 26  ↑
+
+Tags: {summer, charity_legend, alliance_martial, blood_on_steps}
+====================================
+
+Summer comes. The blood washes away, but the memory does not.
+
+You have ruled for five full years now. The people still sing
+songs of your mercy in Year 1, but they also whisper of the
+dawn arrests. You are a paradox—merciful and merciless,
+loved and feared.
+
+Your treasury holds. Your army stands ready. Your throne
+is secure.
+
+But at what cost?
+
+[Type 'next' to continue your reign]
+
+// ⌖ HZN::[Σ=1810|λ=0.82|φ=14|Δ=FRACTURED]
+Terror preserves the throne.
+Entropy climbs toward instability. The system reflects mounting contradictions: the merciful king who fed his people now executes nobles at dawn. Your duality axes strain—deep mercy paired with deep justice, creating a ruler of terrible complexity.
+Dread rises significantly. The realm is stable through fear now, not love alone.
+The conspiracy is crushed. But what follows a reign written in blood and bread?
+
+YEAR 6 — SUMMER
+====================================
+
+THE ASTER HERESY
+====================================
+Banner: Doctrine Challenged
+Mood: Incense and murmurs
+
+A scholar-preacher draws crowds with star-charts and doubt.
+
+In the square below the cathedral, a man in simple robes
+speaks to growing crowds. His name is Aster. He holds not
+scripture but celestial maps, measuring the heavens with
+instruments that gleam like heresy.
+
+"The stars do not lie," he tells them. "What the church
+teaches and what the sky shows—these are not the same."
+
+Your priests demand action. The crowds grow larger each day.
+Some come to mock. Others come to listen. A few come to
+believe.
+
+Your Ravengard queen is pragmatic: "Belief or unbelief—what
+matters is whether he threatens order." Your faith advisors
+are less measured: "He threatens God Himself."
+
+You've already demonstrated your capacity for dawn arrests.
+But this is different—not nobles plotting in shadows, but
+a scholar speaking in daylight.
+
+====================================
+COUNCIL WHISPERS:
+"The bishops must be appeased."
+"Trust the scholars' instruments."
+====================================
+
+YOUR OPTIONS:
+
+[1] SANCTION AN INQUEST; PURGE THE SECT
+    Empower the inquisition to root out heresy.
+    
+    Effects: Faith restored through religious authority.
+    Fear silences doubt, but neighbors inform on neighbors.
+
+[2] HOST A PUBLIC DISPUTATION AT COURT
+    Let reason and doctrine debate before witnesses.
+    
+    Effects: Intellectual approach risks undermining faith
+    but may satisfy both sides through reasoned discourse.
+
+[3] IGNORE IT; FADS FADE
+    Let the matter resolve itself without intervention.
+    
+    Effects: Minimal cost, but heresy may spread unchecked
+    if left to grow organically.
+
+====================================
+REALM STATUS — YEAR 6 (Summer)
+====================================
+Stability:   [███████████████████████] 57
+Faith:       [██████████████████████] 53
+Treasury:    [████████████████████░░] 41
+People:      [██████████████████████] 60
+Dread:       [████████░░░░░░░░░░░░░] 26
+
+Choose: [1], [2], or [3]
+
+// ⌖ HZN::[Σ=19C8|λ=0.84|φ=15|Δ=FRACTURED]
+Faith meets the stars.
+After blood on marble steps, a different kind of challenge: not treason but doubt. Not daggers but star-charts. The Aster Heresy tests whether your severity extends to matters of belief.
+You are already feared. The question now: will you be feared for controlling bodies, or also for controlling minds?
+Your dread is elevated. More terror may stabilize faith—or fracture something deeper.
+What is your command?
+
+
+Spectacular, no? I actually gave you 2 turns so that you can have 2 points of contact and see some of the flow.
+
+Hello Claude.
+
+This is the King's Dilemma Deck Pack 1.
+
+Upon use, shuffle and integrate into King's Dilemma. Ensure contexually appropriate and random introduction into the game.
+
+Let me re-iterate. The only reason these are ordered is because human communication necessitates temporal language. Present them randomly and introduce them when context makes it appropriate. This gives the user a new, dynamic playthrough every time.
+
+-------------------------------------
+
+// == CARD PACK: KD CARD DECK 1 ==
+// Usage: Deck.load(KD_CARD_DECK_1.pack)
+
+module KD_CARD_DECK_1 {
+
+  export pack = [
+
+    // 1) WEAVERS’ LOCKOUT
+    Schema.Card{
+      id:"weaver_lockout",
+      title:"The Weavers’ Lockout",
+      scene:"Looms idle; shutters barred; foremen post seals on doors.",
+      panel:{banner:"Guild Standoff", mood:"muted looms"},
+      decision_prompt:"Masters lock out weavers over rate disputes. How do you resolve pay and control?",
+      appears_if:{threshold:{meter:"people", op:">=", value:45}},
+      weight:5,
+      options:[
+        Schema.Option{
+          id:"mediate",
+          title:"Mediate a wage scale and binding arbitration.",
+          effect:Schema.Effect{delta:{people:+2, stability:+2, legitimacy:+2}, shift:{secrecy_transparency:+6, tradition_reform:+4}}
+        },
+        Schema.Option{
+          id:"break",
+          title:"Break the lockout; conscript looms for crown orders.",
+          effect:Schema.Effect{delta:{people:-3, stability:+2, treasury:-2, dread:+4}, shift:{mercy_justice:+8, secrecy_transparency:-6}, add_tags:["guild_resentment"]}
+        },
+        Schema.Option{
+          id:"side_masters",
+          title:"Back the masters; cap journeymen numbers.",
+          effect:Schema.Effect{delta:{people:-4, stability:+1}, shift:{tradition_reform:-4, mercy_justice:+4}}
+        }
+      ]
+    },
+
+    // 2) RIVER TARIFF BOARD
+    Schema.Card{
+      id:"river_tariff_board",
+      title:"Copper at the Ford",
+      scene:"Poles mark a shallow crossing; barge men argue ledgers.",
+      panel:{banner:"Water Duties", mood:"gray current"},
+      decision_prompt:"Merchants demand standardized river tariffs across duchies. Do you intervene?",
+      appears_if:{any_tags:["summer"], threshold:{meter:"stability", op:">=", value:50}},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"unify",
+          title:"Unify tolls; crown sets a single schedule.",
+          effect:Schema.Effect{delta:{stability:+2, legitimacy:+2}, shift:{secrecy_transparency:+6, tradition_reform:+4}, enqueue:[{in:2, effect:Schema.Effect{delta:{treasury:+2}, note:"Predictable trade lifts receipts."}}]}
+        },
+        Schema.Option{
+          id:"local",
+          title:"Leave to local lords; publish guidance only.",
+          effect:Schema.Effect{delta:{stability:+1}, shift:{secrecy_transparency:+2, tradition_reform:-2}}
+        },
+        Schema.Option{
+          id:"squeeze",
+          title:"Raise crown share quietly via inspectors.",
+          effect:Schema.Effect{delta:{treasury:+4, people:-2}, shift:{secrecy_transparency:-6, mercy_justice:+2}}
+        }
+      ]
+    },
+
+    // 3) GLASSMAKER MONOPOLY
+    Schema.Card{
+      id:"glassmakers_patent",
+      title:"Clarity for a Price",
+      scene:"Furnaces roar; foreman locks a chest of secret recipes.",
+      panel:{banner:"Exclusive Charters", mood:"heat-shimmer"},
+      decision_prompt:"Guild petitions for an exclusive patent on crown glass. Approve monopoly?",
+      appears_if:{threshold:{meter:"treasury", op:">=", value:35}},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"grant_patent",
+          title:"Grant a 5-year patent with export duties.",
+          effect:Schema.Effect{delta:{treasury:+4, stability:+1}, shift:{tradition_reform:+2, secrecy_transparency:-2}, add_tags:["glass_patent"]}
+        },
+        Schema.Option{
+          id:"open_compete",
+          title:"Deny monopoly; encourage open competition.",
+          effect:Schema.Effect{delta:{people:+2, legitimacy:+2}, shift:{tradition_reform:+6, secrecy_transparency:+4}}
+        },
+        Schema.Option{
+          id:"state_shop",
+          title:"Establish a crown workshop; hire masters.",
+          effect:Schema.Effect{delta:{treasury:-6, legitimacy:+2, stability:+1}, shift:{secrecy_transparency:+2}, enqueue:[{in:3, effect:Schema.Effect{delta:{treasury:+3}, note:"Royal panes fetch premium rates."}}]}
+        }
+      ]
+    },
+
+    // 4) SPICE CARAVAN SEIZURE
+    Schema.Card{
+      id:"spice_caravan_seizure",
+      title:"Saffron and Steel",
+      scene:"Mounted men surround spice carts; seals are broken at dusk.",
+      panel:{banner:"Highway Justice", mood:"dust and hush"},
+      decision_prompt:"A lord’s men ‘inspect’ a foreign caravan and seize goods. Your response?",
+      appears_if:{threshold:{meter:"legitimacy", op:">=", value:48}},
+      weight:5,
+      options:[
+        Schema.Option{
+          id:"compel_return",
+          title:"Compel restitution; fine the lord heavily.",
+          effect:Schema.Effect{delta:{legitimacy:+3, people:+2, stability:+1}, shift:{mercy_justice:+6, secrecy_transparency:+6}}
+        },
+        Schema.Option{
+          id:"arbitrate_share",
+          title:"Arbitrate: partial return, crown takes a share.",
+          effect:Schema.Effect{delta:{treasury:+3, stability:+1}, shift:{mercy_justice:+2, secrecy_transparency:+2}}
+        },
+        Schema.Option{
+          id:"ignore",
+          title:"Ignore; classify as feudal prerogative.",
+          effect:Schema.Effect{delta:{legitimacy:-3, people:-2}, shift:{mercy_justice:+4, secrecy_transparency:-4}, add_tags:["merchant_resentment"]}
+        }
+      ]
+    },
+
+    // 5) MINT OVERSIGHT BOARD
+    Schema.Card{
+      id:"mint_oversight_board",
+      title:"Hands Off the Die",
+      scene:"Scales clink; a warder watches silver ingots pass.",
+      panel:{banner:"Hard Money", mood:"cold metal"},
+      decision_prompt:"Appoint independent auditors to the mint or leave it to the treasurer?",
+      appears_if:{year_min:2},
+      weight:3,
+      options:[
+        Schema.Option{
+          id:"appoint_board",
+          title:"Seat independent auditors; publish assays.",
+          effect:Schema.Effect{delta:{legitimacy:+2, stability:+2}, shift:{secrecy_transparency:+8}}
+        },
+        Schema.Option{
+          id:"treasurer_control",
+          title:"Keep coinage under treasurer’s strict control.",
+          effect:Schema.Effect{delta:{stability:+1}, shift:{secrecy_transparency:-4}}
+        },
+        Schema.Option{
+          id:"farm_contract",
+          title:"Farm mint operations to a bonded guild.",
+          effect:Schema.Effect{delta:{treasury:+3, legitimacy:-1}, shift:{tradition_reform:+2, secrecy_transparency:-2}}
+        }
+      ]
+    },
+
+    // 6) GRAIN PRICE CEILINGS
+    Schema.Card{
+      id:"grain_price_ceiling",
+      title:"Bread for All?",
+      scene:"Scales tilt; bakers whisper over flour sacks.",
+      panel:{banner:"Market Tension", mood:"flour-dust"},
+      decision_prompt:"Set maximum bread prices after a poor harvest?",
+      appears_if:{any_tags:["winter"]},
+      weight:5,
+      options:[
+        Schema.Option{
+          id:"cap_prices",
+          title:"Cap retail prices; subsidize bakeries.",
+          effect:Schema.Effect{delta:{treasury:-7, people:+4, stability:+2}, shift:{mercy_justice:-6, secrecy_transparency:+2}, enqueue:[{in:2, effect:Schema.Effect{delta:{stability:-2}, note:"Shortages spur a gray market."}}]}
+        },
+        Schema.Option{
+          id:"free_prices",
+          title:"Let prices float; publish fair-weight edicts.",
+          effect:Schema.Effect{delta:{people:-3, stability:+1}, shift:{tradition_reform:+4, secrecy_transparency:+4}}
+        },
+        Schema.Option{
+          id:"ration",
+          title:"Issue ration tickets through parishes.",
+          effect:Schema.Effect{delta:{people:+3, stability:+1, treasury:-4}, shift:{secrecy_transparency:-2, mercy_justice:-2}}
+        }
+      ]
+    },
+
+    // 7) WAREHOUSE FIRE INSURANCE
+    Schema.Card{
+      id:"port_warehouse_insurance",
+      title:"Ash in the Ledger",
+      scene:"Charred beams sag; tally sticks blacken in cinders.",
+      panel:{banner:"Risk and Relief", mood:"smoke-haze"},
+      decision_prompt:"Merchants request crown-backed fire insurance after a port blaze. Backstop it?",
+      appears_if:{any_tags:["summer"], threshold:{meter:"treasury", op:">=", value:30}},
+      weight:3,
+      options:[
+        Schema.Option{
+          id:"mutual_aid",
+          title:"Charter a mutual fund; crown guarantees last resort.",
+          effect:Schema.Effect{delta:{treasury:-3, legitimacy:+2, stability:+1}, shift:{tradition_reform:+4, secrecy_transparency:+4}}
+        },
+        Schema.Option{
+          id:"private_only",
+          title:"Allow private insurers; crown abstains.",
+          effect:Schema.Effect{delta:{stability:+0}, shift:{tradition_reform:+2}}
+        },
+        Schema.Option{
+          id:"tax_rebate",
+          title:"Offer limited tax rebates for rebuilt stores.",
+          effect:Schema.Effect{delta:{treasury:-2, people:+1}, shift:{mercy_justice:-2}}
+        }
+      ]
+    },
+
+    // 8) BROKERS’ FRAUD
+    Schema.Card{
+      id:"broker_fraud_trials",
+      title:"Paper Without Goods",
+      scene:"Criers announce arrests; shutters clap closed along the Exchange.",
+      panel:{banner:"Law in the Market", mood:"cold ink"},
+      decision_prompt:"Arrested brokers forged receipts. Which sentence?",
+      appears_if:{year_min:3},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"public_flog_fine",
+          title:"Public punishment and heavy restitution.",
+          effect:Schema.Effect{delta:{treasury:+3, stability:+2, people:+1}, shift:{mercy_justice:+8}}
+        },
+        Schema.Option{
+          id:"lifelong_ban",
+          title:"Ban from trade; spare physical punishment.",
+          effect:Schema.Effect{delta:{stability:+1, legitimacy:+1}, shift:{mercy_justice:+2}}
+        },
+        Schema.Option{
+          id:"quiet_settlement",
+          title:"Quiet settlements; protect market confidence.",
+          effect:Schema.Effect{delta:{stability:+1, legitimacy:-2}, shift:{secrecy_transparency:-8}}
+        }
+      ]
+    },
+
+    // 9) FOREIGN BANK BRANCH
+    Schema.Card{
+      id:"foreign_bank_branch",
+      title:"Letters from Abroad",
+      scene:"A polished envoy bows; a new countinghouse sign unveiled.",
+      panel:{banner:"Credit Lines", mood:"oiled wood"},
+      decision_prompt:"A foreign bank seeks a branch in your capital. Permit entry?",
+      appears_if:{threshold:{meter:"treasury", op:"<=", value:55}},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"permit_bond",
+          title:"Permit with bonds and royal oversight.",
+          effect:Schema.Effect{delta:{treasury:+4, legitimacy:+1}, shift:{secrecy_transparency:+4, tradition_reform:+4}}
+        },
+        Schema.Option{
+          id:"deny",
+          title:"Deny; protect domestic lenders.",
+          effect:Schema.Effect{delta:{legitimacy:+0}, shift:{tradition_reform:-2}, add_tags:["credit_scarcity"]}
+        },
+        Schema.Option{
+          id:"revenue_share",
+          title:"Approve revenue-sharing charter.",
+          effect:Schema.Effect{delta:{treasury:+5, legitimacy:-1}, shift:{secrecy_transparency:-2}}
+        }
+      ]
+    },
+
+    // 10) COPPER MINE SAFETY
+    Schema.Card{
+      id:"copper_mine_safety",
+      title:"Below the Mountain",
+      scene:"Timbers creak; a foreman counts helmets left on hooks.",
+      panel:{banner:"Work and Woe", mood:"dripping dark"},
+      decision_prompt:"After a collapse, miners demand new safety codes. How do you respond?",
+      appears_if:{threshold:{meter:"people", op:">=", value:48}},
+      weight:5,
+      options:[
+        Schema.Option{
+          id:"new_codes",
+          title:"Impose safety codes; inspectors fine violators.",
+          effect:Schema.Effect{delta:{stability:+2, people:+3, treasury:-2}, shift:{mercy_justice:-4, secrecy_transparency:+4}}
+        },
+        Schema.Option{
+          id:"owner_liability",
+          title:"Force owners to fund a relief fund.",
+          effect:Schema.Effect{delta:{people:+2, treasury:+1}, shift:{mercy_justice:-2, tradition_reform:+2}}
+        },
+        Schema.Option{
+          id:"business_first",
+          title:"Urge ‘prudence’ and reopen quickly.",
+          effect:Schema.Effect{delta:{people:-3, stability:-1}, shift:{tradition_reform:-2}}
+        }
+      ]
+    },
+
+    // 11) ORPHANAGE PETITION
+    Schema.Card{
+      id:"orphanage_petition",
+      title:"Children at the Gate",
+      scene:"Small hands clutch a letter; matron waits in the rain.",
+      panel:{banner:"Care and Coin", mood:"wet stone"},
+      decision_prompt:"Religious houses request funds to expand orphan care. Do you support it?",
+      appears_if:{threshold:{meter:"faith", op:">=", value:45}},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"fund",
+          title:"Fund expansion; require ledgers and audits.",
+          effect:Schema.Effect{delta:{treasury:-5, people:+4, legitimacy:+1}, shift:{piety_reason:-2, secrecy_transparency:+6}}
+        },
+        Schema.Option{
+          id:"alms_drive",
+          title:"Launch a realm-wide alms drive.",
+          effect:Schema.Effect{delta:{people:+2, faith:+2}, shift:{piety_reason:-2}}
+        },
+        Schema.Option{
+          id:"decline",
+          title:"Decline; recommend parish charity instead.",
+          effect:Schema.Effect{delta:{people:-2}, shift:{piety_reason:-2, tradition_reform:-2}}
+        }
+      ]
+    },
+
+    // 12) VETERANS’ PENSIONS
+    Schema.Card{
+      id:"veterans_pensions",
+      title:"Brothers in Arms, Now in Need",
+      scene:"Scarred men stand at muster stones; a clerk recites names.",
+      panel:{banner:"Debt of Service", mood:"hail and iron"},
+      decision_prompt:"A petition seeks pensions for maimed veterans. Your stance?",
+      appears_if:{threshold:{meter:"army", op:">=", value:45}},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"grant_stipends",
+          title:"Grant modest stipends from war chest.",
+          effect:Schema.Effect{delta:{treasury:-4, legitimacy:+2, people:+2}, shift:{mercy_justice:-4}}
+        },
+        Schema.Option{
+          id:"land_grants",
+          title:"Offer land parcels in border hamlets.",
+          effect:Schema.Effect{delta:{people:+1, stability:+1}, shift:{tradition_reform:+2}, enqueue:[{in:3, effect:Schema.Effect{delta:{stability:-2}, note:"Settlers clash with locals."}}]}
+        },
+        Schema.Option{
+          id:"deny",
+          title:"Deny; encourage guild retraining.",
+          effect:Schema.Effect{delta:{people:-2}, shift:{tradition_reform:+2}}
+        }
+      ]
+    },
+
+    // 13) CITY WATCH REFORM
+    Schema.Card{
+      id:"city_watch_reform",
+      title:"Keys at Midnight",
+      scene:"Torches gutter; a watchman swaps favors for silence.",
+      panel:{banner:"Order or Abuse", mood:"sooty alleys"},
+      decision_prompt:"Reports of watch extortion spread. Reform the night watch?",
+      appears_if:{year_min:2},
+      weight:5,
+      options:[
+        Schema.Option{
+          id:"professionalize",
+          title:"Professionalize with pay scales and oversight.",
+          effect:Schema.Effect{delta:{stability:+3, treasury:-3, legitimacy:+2}, shift:{secrecy_transparency:+8}}
+        },
+        Schema.Option{
+          id:"rotate_nobles",
+          title:"Rotate noble pages to command the watch.",
+          effect:Schema.Effect{delta:{stability:+1, legitimacy:+1}, shift:{tradition_reform:-2}}
+        },
+        Schema.Option{
+          id:"ignore",
+          title:"Ignore; punish only egregious cases quietly.",
+          effect:Schema.Effect{delta:{stability:-1, legitimacy:-2}, shift:{secrecy_transparency:-6}}
+        }
+      ]
+    },
+
+    // 14) TENANT EVICTIONS
+    Schema.Card{
+      id:"tenant_evictions",
+      title:"Bales at Dawn",
+      scene:"Beds on the street; a steward points to painted doors.",
+      panel:{banner:"Letters and Lives", mood:"cold dawn"},
+      decision_prompt:"A lord evicts tenants en masse before winter. Intervene?",
+      appears_if:{any_tags:["winter"]},
+      weight:5,
+      options:[
+        Schema.Option{
+          id:"stay_writs",
+          title:"Stay the writs until spring; mediate arrears.",
+          effect:Schema.Effect{delta:{people:+4, stability:+1, legitimacy:+2}, shift:{mercy_justice:-6}}
+        },
+        Schema.Option{
+          id:"relief_only",
+          title:"Provide temporary relief; let evictions proceed.",
+          effect:Schema.Effect{delta:{treasury:-3, people:+1}, shift:{mercy_justice:-2}}
+        },
+        Schema.Option{
+          id:"back_lord",
+          title:"Back the lord’s right; send soldiers to enforce.",
+          effect:Schema.Effect{delta:{people:-5, dread:+4, stability:+1}, shift:{mercy_justice:+8, secrecy_transparency:-2}}
+        }
+      ]
+    },
+
+    // 15) APPRENTICE TERMS
+    Schema.Card{
+      id:"apprentice_term_limits",
+      title:"Seven Years or More?",
+      scene:"A boy stares at the guild clock; master folds arms.",
+      panel:{banner:"Youth and Craft", mood:"tallow and brass"},
+      decision_prompt:"Standardize apprenticeship terms and release ages?",
+      appears_if:{threshold:{meter:"stability", op:">=", value:50}},
+      weight:3,
+      options:[
+        Schema.Option{
+          id:"standardize",
+          title:"Set term caps and release certificates.",
+          effect:Schema.Effect{delta:{people:+2, legitimacy:+2}, shift:{tradition_reform:+4, secrecy_transparency:+4}}
+        },
+        Schema.Option{
+          id:"guild_autonomy",
+          title:"Leave terms to each guild’s charter.",
+          effect:Schema.Effect{delta:{stability:+1}, shift:{tradition_reform:-2}}
+        },
+        Schema.Option{
+          id:"royal_exam",
+          title:"Introduce royal exams to shorten terms.",
+          effect:Schema.Effect{delta:{treasury:-2, people:+1}, shift:{tradition_reform:+6}}
+        }
+      ]
+    },
+
+    // 16) NIGHT MARKET LICENSING
+    Schema.Card{
+      id:"night_market_licensing",
+      title:"Lanterns After Curfew",
+      scene:"Lantern-lit stalls whisper coins across velvet.",
+      panel:{banner:"Trade at Night", mood:"amber glow"},
+      decision_prompt:"Unlicensed night markets flourish. Regulate or repress?",
+      appears_if:{threshold:{meter:"stability", op:"<=", value:60}},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"license_fee",
+          title:"License with modest fees and guards.",
+          effect:Schema.Effect{delta:{treasury:+3, stability:+1, people:+1}, shift:{secrecy_transparency:+6}}
+        },
+        Schema.Option{
+          id:"shut_down",
+          title:"Shut down; arrest ringleaders.",
+          effect:Schema.Effect{delta:{people:-3, stability:+1, dread:+3}, shift:{mercy_justice:+6, secrecy_transparency:-6}}
+        },
+        Schema.Option{
+          id:"guild_share",
+          title:"Fold markets under guild stalls only.",
+          effect:Schema.Effect{delta:{stability:+1}, shift:{tradition_reform:-2}}
+        }
+      ]
+    },
+
+    // 17) PROSTITUTION REGULATIONS
+    Schema.Card{
+      id:"regulated_quarter",
+      title:"The Scarlet Ward",
+      scene:"A curtained doorway; a bead tally at the post.",
+      panel:{banner:"Morals and Money", mood:"low murmur"},
+      decision_prompt:"Clergy protest the brothel quarter; physicians request regulation. Your move?",
+      appears_if:{threshold:{meter:"faith", op:">=", value:40}},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"license_health",
+          title:"License with health checks and taxes.",
+          effect:Schema.Effect{delta:{treasury:+4, stability:+1}, shift:{piety_reason:+4, secrecy_transparency:+4}}
+        },
+        Schema.Option{
+          id:"abolish",
+          title:"Abolish the quarter; patrols enforce virtue.",
+          effect:Schema.Effect{delta:{faith:+3, people:-4, dread:+3}, shift:{piety_reason:-8, mercy_justice:+4}}
+        },
+        Schema.Option{
+          id:"quiet_status_quo",
+          title:"Quiet status quo; increase lantern patrols.",
+          effect:Schema.Effect{delta:{stability:+1}, shift:{secrecy_transparency:-2}}
+        }
+      ]
+    },
+
+    // 18) CIRCUIT JUDGES
+    Schema.Card{
+      id:"circuit_judges",
+      title:"Law on the Road",
+      scene:"Red wax seals; horses eager at a frost-bitten yard.",
+      panel:{banner:"Crown Justice", mood:"saddle-leather"},
+      decision_prompt:"Expand circuit judges to remote shires?",
+      appears_if:{year_min:2},
+      weight:3,
+      options:[
+        Schema.Option{
+          id:"expand",
+          title:"Expand circuits; publish rulings.",
+          effect:Schema.Effect{delta:{legitimacy:+3, stability:+2, treasury:-3}, shift:{secrecy_transparency:+8}}
+        },
+        Schema.Option{
+          id:"pilot",
+          title:"Pilot a single new circuit.",
+          effect:Schema.Effect{delta:{legitimacy:+1, treasury:-1}, shift:{secrecy_transparency:+4}}
+        },
+        Schema.Option{
+          id:"defer",
+          title:"Defer; empower sheriffs instead.",
+          effect:Schema.Effect{delta:{stability:+0}, shift:{tradition_reform:-2}}
+        }
+      ]
+    },
+
+    // 19) CATHEDRAL REPAIRS
+    Schema.Card{
+      id:"cathedral_repairs",
+      title:"Stone and Donation",
+      scene:"Scaffolds cling to a nave; coins chime in a box.",
+      panel:{banner:"Sacred Maintenance", mood:"dust and hymn"},
+      decision_prompt:"Bishop asks for crown aid to repair the cathedral roof. Aid granted?",
+      appears_if:{threshold:{meter:"faith", op:">=", value:45}},
+      weight:3,
+      options:[
+        Schema.Option{
+          id:"match_funds",
+          title:"Match parish funds; insist on accounts.",
+          effect:Schema.Effect{delta:{treasury:-4, faith:+3, legitimacy:+1}, shift:{piety_reason:-2, secrecy_transparency:+4}}
+        },
+        Schema.Option{
+          id:"pilgrim_levy",
+          title:"Impose a pilgrim levy for repairs.",
+          effect:Schema.Effect{delta:{treasury:+3, faith:+1, people:-1}, shift:{piety_reason:-2}}
+        },
+        Schema.Option{
+          id:"no_aid",
+          title:"No crown coin; church must fund itself.",
+          effect:Schema.Effect{delta:{faith:-2, legitimacy:+1}, shift:{piety_reason:+2}}
+        }
+      ]
+    },
+
+    // 20) STREET PREACHERS
+    Schema.Card{
+      id:"street_preacher_licenses",
+      title:"Words on the Steps",
+      scene:"A crowd gathers; a clerk copies phrases in the margin.",
+      panel:{banner:"Doctrine in the Square", mood:"echoing stones"},
+      decision_prompt:"Unaffiliated preachers stir crowds. License or disperse?",
+      appears_if:{threshold:{meter:"faith", op:"<=", value:62}},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"license",
+          title:"License with sermon permits.",
+          effect:Schema.Effect{delta:{faith:+1, stability:+1}, shift:{piety_reason:-2, secrecy_transparency:+4}}
+        },
+        Schema.Option{
+          id:"disperse",
+          title:"Disperse unauthorized preachings.",
+          effect:Schema.Effect{delta:{faith:+2, people:-2}, shift:{piety_reason:-4, mercy_justice:+4}}
+        },
+        Schema.Option{
+          id:"debate_square",
+          title:"Host open debates moderated by clergy.",
+          effect:Schema.Effect{delta:{stability:+1, legitimacy:+2}, shift:{piety_reason:+6, secrecy_transparency:+6}}
+        }
+      ]
+    },
+
+    // 21) MONASTERY SURVEY
+    Schema.Card{
+      id:"monastery_land_survey",
+      title:"Fields Behind the Cloister",
+      scene:"Novices pace hedgerows; a royal measurer dips his rod.",
+      panel:{banner:"Church and Crown", mood:"quiet footfalls"},
+      decision_prompt:"Survey monastic lands for taxation or leave untouched?",
+      appears_if:{threshold:{meter:"treasury", op:"<=", value:60}},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"survey_tax",
+          title:"Survey and tax surplus acreage.",
+          effect:Schema.Effect{delta:{treasury:+6, faith:-2}, shift:{piety_reason:+2, secrecy_transparency:+2}}
+        },
+        Schema.Option{
+          id:"exempt",
+          title:"Exempt; request alms for the poor instead.",
+          effect:Schema.Effect{delta:{faith:+2, people:+1}, shift:{piety_reason:-2}}
+        },
+        Schema.Option{
+          id:"lease_back",
+          title:"Lease church lands to crown for works.",
+          effect:Schema.Effect{delta:{treasury:+3, legitimacy:+1}, shift:{tradition_reform:+2}}
+        }
+      ]
+    },
+
+    // 22) HERETICAL PAMPHLETS
+    Schema.Card{
+      id:"heretical_pamphlets",
+      title:"Ink Like Sparks",
+      scene:"Sheets flutter in alleys; boys laugh and run.",
+      panel:{banner:"Words on Fire", mood:"paper rustle"},
+      decision_prompt:"Pamphlets dispute a core doctrine. How do you respond?",
+      appears_if:{threshold:{meter:"faith", op:"<=", value:55}},
+      weight:5,
+      options:[
+        Schema.Option{
+          id:"seize_copies",
+          title:"Seize copies; fine printers.",
+          effect:Schema.Effect{delta:{faith:+2, stability:+1, legitimacy:-1}, shift:{piety_reason:-4, secrecy_transparency:-6}}
+        },
+        Schema.Option{
+          id:"publish_reply",
+          title:"Commission a reasoned reply for public reading.",
+          effect:Schema.Effect{delta:{legitimacy:+2, stability:+1}, shift:{piety_reason:+6, secrecy_transparency:+6}}
+        },
+        Schema.Option{
+          id:"ignore",
+          title:"Ignore; let the fad burn itself out.",
+          effect:Schema.Effect{delta:{stability:-1, faith:-2}, shift:{piety_reason:+2}}
+        }
+      ]
+    },
+
+    // 23) UNIVERSITY CHARTER DISPUTE
+    Schema.Card{
+      id:"university_charter_dispute",
+      title:"Seal and Counter-Seal",
+      scene:"Scholars argue before a tapestry; a scribe records every word.",
+      panel:{banner:"Learning and Power", mood:"ink and whisper"},
+      decision_prompt:"Cathedral school and university fight over jurisdiction. Who wins?",
+      appears_if:{threshold:{meter:"legitimacy", op:">=", value:50}},
+      weight:3,
+      options:[
+        Schema.Option{
+          id:"side_university",
+          title:"Side with the university’s autonomy.",
+          effect:Schema.Effect{delta:{legitimacy:+2, people:+1, treasury:-2}, shift:{piety_reason:+6, tradition_reform:+4}}
+        },
+        Schema.Option{
+          id:"side_church",
+          title:"Side with cathedral oversight.",
+          effect:Schema.Effect{delta:{faith:+2, legitimacy:+1}, shift:{piety_reason:-4, tradition_reform:-2}}
+        },
+        Schema.Option{
+          id:"joint_court",
+          title:"Create a joint court for disputes.",
+          effect:Schema.Effect{delta:{stability:+2}, shift:{secrecy_transparency:+4}}
+        }
+      ]
+    },
+
+    // 24) SANCTUARY RIGHT
+    Schema.Card{
+      id:"sanctuary_right_limits",
+      title:"Knock at the Nave",
+      scene:"A fugitive grips the iron ring; guards hesitate.",
+      panel:{banner:"Law and Mercy", mood:"echoing nave"},
+      decision_prompt:"Limit right of sanctuary for violent crimes?",
+      appears_if:{year_min:3},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"limit",
+          title:"Limit sanctuary; expedite crown justice.",
+          effect:Schema.Effect{delta:{stability:+2, legitimacy:+2}, shift:{mercy_justice:+8, piety_reason:+2}}
+        },
+        Schema.Option{
+          id:"preserve",
+          title:"Preserve sanctuary; require penance.",
+          effect:Schema.Effect{delta:{faith:+2, people:+1}, shift:{mercy_justice:-4}}
+        },
+        Schema.Option{
+          id:"case_by_case",
+          title:"Case-by-case board of clergy and sheriffs.",
+          effect:Schema.Effect{delta:{stability:+1, legitimacy:+1}, shift:{secrecy_transparency:+4}}
+        }
+      ]
+    },
+
+    // 25) TRUCE WITH SOUTHERN DUKE
+    Schema.Card{
+      id:"southern_truce",
+      title:"Wine and Daggers",
+      scene:"Tent walls ripple; two banners share a single wind.",
+      panel:{banner:"Border Calculus", mood:"late sun"},
+      decision_prompt:"A southern duke offers truce after skirmishes. Terms?",
+      appears_if:{threshold:{meter:"army", op:">=", value:40}},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"accept_hostages",
+          title:"Accept truce with hostages exchanged.",
+          effect:Schema.Effect{delta:{stability:+2, legitimacy:+1}, shift:{war_peace:+6}}
+        },
+        Schema.Option{
+          id:"trade_concessions",
+          title:"Link truce to trade concessions.",
+          effect:Schema.Effect{delta:{treasury:+2, stability:+1}, shift:{war_peace:+4, secrecy_transparency:+2}}
+        },
+        Schema.Option{
+          id:"reject_raid",
+          title:"Reject; launch limited reprisal.",
+          effect:Schema.Effect{delta:{army:-3, stability:+1, dread:+2}, shift:{war_peace:-8}}
+        }
+      ]
+    },
+
+    // 26) BEACON FIRES PROTOCOL
+    Schema.Card{
+      id:"beacon_fires_protocol",
+      title:"Flame on the Ridge",
+      scene:"Watchmen stack oil jars; a captain drills the signal.",
+      panel:{banner:"Early Warning", mood:"salt wind"},
+      decision_prompt:"Standardize border beacon signals and penalties for false alarms?",
+      appears_if:{any_tags:["winter"]},
+      weight:3,
+      options:[
+        Schema.Option{
+          id:"standardize_beacons",
+          title:"Standardize; harsh fines for false fires.",
+          effect:Schema.Effect{delta:{stability:+2}, shift:{tradition_reform:+4, mercy_justice:+2}}
+        },
+        Schema.Option{
+          id:"local_codes",
+          title:"Keep local codes; fund extra oil.",
+          effect:Schema.Effect{delta:{treasury:-2, stability:+1}}
+        },
+        Schema.Option{
+          id:"volunteer_watch",
+          title:"Volunteer watch lists; pardon minor errors.",
+          effect:Schema.Effect{delta:{people:+1}, shift:{mercy_justice:-2}}
+        }
+      ]
+    },
+
+    // 27) HOSTAGE EXCHANGE
+    Schema.Card{
+      id:"hostage_exchange",
+      title:"Gold Seals, Pale Faces",
+      scene:"Young nobles cross a narrow bridge between guards.",
+      panel:{banner:"Pledge of Peace", mood:"held breath"},
+      decision_prompt:"Foreign court proposes hostage exchange to secure peace. Agree?",
+      appears_if:{threshold:{meter:"stability", op:">=", value:52}},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"agree",
+          title:"Agree; choose sons of fractious lords.",
+          effect:Schema.Effect{delta:{stability:+2, legitimacy:+1}, shift:{war_peace:+6}, add_tags:["hostage_pact"]}
+        },
+        Schema.Option{
+          id:"refuse",
+          title:"Refuse; rely on forts instead.",
+          effect:Schema.Effect{delta:{stability:+0}, shift:{war_peace:-2}}
+        },
+        Schema.Option{
+          id:"alternate",
+          title:"Offer marriage ties in lieu of hostages.",
+          effect:Schema.Effect{delta:{stability:+1, legitimacy:+1}, shift:{war_peace:+4, tradition_reform:-2}}
+        }
+      ]
+    },
+
+    // 28) NAVAL TREATY
+    Schema.Card{
+      id:"naval_treaty_piracy",
+      title:"Oars in Rhythm",
+      scene:"Admirals scratch coasts on wax tablets; seals thud.",
+      panel:{banner:"Sea Peace", mood:"tar and gulls"},
+      decision_prompt:"Rivals propose a joint anti-piracy treaty. Sign?",
+      appears_if:{any_tags:["summer"], threshold:{meter:"treasury", op:">=", value:32}},
+      weight:3,
+      options:[
+        Schema.Option{
+          id:"sign",
+          title:"Sign with shared patrols.",
+          effect:Schema.Effect{delta:{treasury:-3, stability:+2}, shift:{war_peace:+6}, enqueue:[{in:2, effect:Schema.Effect{delta:{treasury:+2}, note:"Prize courts remit shares."}}]}
+        },
+        Schema.Option{
+          id:"solo",
+          title:"Go solo; expand convoy escorts.",
+          effect:Schema.Effect{delta:{treasury:-3, stability:+1}}
+        },
+        Schema.Option{
+          id:"privateers",
+          title:"Secretly license privateers instead.",
+          effect:Schema.Effect{delta:{treasury:+3, legitimacy:-2}, shift:{secrecy_transparency:-6}}
+        }
+      ]
+    },
+
+    // 29) MOUNTAIN PASS TOLL
+    Schema.Card{
+      id:"mountain_pass_toll",
+      title:"The Narrow Way",
+      scene:"Goats pick at scrub; a gatehouse dominates a cliff road.",
+      panel:{banner:"Chokepoint", mood:"thin air"},
+      decision_prompt:"Neighbor demands a cut of your mountain tolls. Concede?",
+      appears_if:{year_min:2},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"split_toll",
+          title:"Split tolls; sign a maintenance pact.",
+          effect:Schema.Effect{delta:{stability:+1, treasury:-1}, shift:{war_peace:+4}}
+        },
+        Schema.Option{
+          id:"refuse_arm",
+          title:"Refuse; arm caravans.",
+          effect:Schema.Effect{delta:{treasury:-2, army:+2, stability:+1}, shift:{war_peace:-6}}
+        },
+        Schema.Option{
+          id:"bypass",
+          title:"Cut a bypass path through crown lands.",
+          effect:Schema.Effect{delta:{treasury:-6, legitimacy:+1}, shift:{tradition_reform:+4}}
+        }
+      ]
+    },
+
+    // 30) SPYMASTER BUDGET
+    Schema.Card{
+      id:"spymaster_budget",
+      title:"Eyes in the Smoke",
+      scene:"A ledger with no headings slides across the table.",
+      panel:{banner:"Hidden Hands", mood:"closed shutters"},
+      decision_prompt:"Spymaster requests a larger ‘black budget’. Approve?",
+      appears_if:{threshold:{meter:"secrecy_transparency", op:"<=", value:20}, year_min:3},
+      weight:5,
+      options:[
+        Schema.Option{
+          id:"approve",
+          title:"Approve; require dead-drop receipts.",
+          effect:Schema.Effect{delta:{stability:+2, treasury:-3}, shift:{secrecy_transparency:-8}}
+        },
+        Schema.Option{
+          id:"deny",
+          title:"Deny; focus on open policing.",
+          effect:Schema.Effect{delta:{stability:-1, legitimacy:+1}, shift:{secrecy_transparency:+6}}
+        },
+        Schema.Option{
+          id:"cap",
+          title:"Cap with quarterly review.",
+          effect:Schema.Effect{delta:{stability:+1, treasury:-1}, shift:{secrecy_transparency:+2}}
+        }
+      ]
+    },
+
+    // 31) REFUGEE ASYLUM
+    Schema.Card{
+      id:"refugee_asylum",
+      title:"Strangers at the Gate",
+      scene:"Cart wheels sink in mud; a woman lifts a child toward the guard.",
+      panel:{banner:"War’s Wake", mood:"soft rain"},
+      decision_prompt:"Refugees flee a border war. Admit, screen, or refuse?",
+      appears_if:{any_tags:["winter"]},
+      weight:5,
+      options:[
+        Schema.Option{
+          id:"admit_work",
+          title:"Admit with work permits and parish aid.",
+          effect:Schema.Effect{delta:{people:+3, stability:+1, treasury:-3}, shift:{mercy_justice:-6, secrecy_transparency:+2}}
+        },
+        Schema.Option{
+          id:"screen_quota",
+          title:"Screen and quota by trade skills.",
+          effect:Schema.Effect{delta:{people:+1, stability:+1}, shift:{mercy_justice:+0, tradition_reform:+2}}
+        },
+        Schema.Option{
+          id:"refuse",
+          title:"Refuse entry; provide border relief only.",
+          effect:Schema.Effect{delta:{people:-3, faith:+1}, shift:{mercy_justice:+6}}
+        }
+      ]
+    },
+
+    // 32) CONSCRIPTION BALLOT
+    Schema.Card{
+      id:"conscription_ballot",
+      title:"Lots in the Bowl",
+      scene:"Wooden tokens rattle; mothers hold their breath.",
+      panel:{banner:"Levy and Law", mood:"cold hall"},
+      decision_prompt:"Army short on men. Institute a draft lottery?",
+      appears_if:{threshold:{meter:"army", op:"<=", value:42}},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"ballot",
+          title:"Ballot with buy-outs funding volunteers.",
+          effect:Schema.Effect{delta:{army:+4, treasury:+2, people:-2}, shift:{mercy_justice:+2}}
+        },
+        Schema.Option{
+          id:"bounty_only",
+          title:"Bounties for volunteers only.",
+          effect:Schema.Effect{delta:{army:+2, treasury:-3}, shift:{war_peace:-2}}
+        },
+        Schema.Option{
+          id:"noble_quota",
+          title:"Quotas by noble house levy.",
+          effect:Schema.Effect{delta:{army:+3, stability:+1}, shift:{tradition_reform:-2}}
+        }
+      ]
+    },
+
+    // 33) CITY SEWERS PLAN
+    Schema.Card{
+      id:"city_sewers_plan",
+      title:"Under the Streets",
+      scene:"A chalk map spreads; the engineer taps a murky inlet.",
+      panel:{banner:"Public Health", mood:"damp stone"},
+      decision_prompt:"Approve a modern sewer plan for the capital?",
+      appears_if:{threshold:{meter:"treasury", op:">=", value:38}},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"approve_full",
+          title:"Approve full plan; phased wards.",
+          effect:Schema.Effect{delta:{treasury:-10, stability:+3, people:+4}, shift:{tradition_reform:+8, secrecy_transparency:+4}, enqueue:[{in:3, effect:Schema.Effect{delta:{people:+2, stability:+1}, note:"Fewer fevers; markets thrive."}}]}
+        },
+        Schema.Option{
+          id:"pilot_ward",
+          title:"Pilot one ward; study outcomes.",
+          effect:Schema.Effect{delta:{treasury:-5, stability:+1, people:+1}, shift:{tradition_reform:+4}}
+        },
+        Schema.Option{
+          id:"defer_clean",
+          title:"Defer; fund street cleaning instead.",
+          effect:Schema.Effect{delta:{treasury:-2, stability:+0}}
+        }
+      ]
+    },
+
+    // 34) MAIL RELAY
+    Schema.Card{
+      id:"royal_post_relays",
+      title:"Hooves of News",
+      scene:"Post horns sound from a fresh horse; wax seal intact.",
+      panel:{banner:"Communication", mood:"clear road"},
+      decision_prompt:"Establish royal post relays along main roads?",
+      appears_if:{threshold:{meter:"stability", op:">=", value:50}},
+      weight:3,
+      options:[
+        Schema.Option{
+          id:"establish",
+          title:"Establish royal relays; crown rate for letters.",
+          effect:Schema.Effect{delta:{treasury:+1, stability:+2, legitimacy:+1}, shift:{tradition_reform:+4, secrecy_transparency:+6}}
+        },
+        Schema.Option{
+          id:"merchant_post",
+          title:"License a merchant post instead.",
+          effect:Schema.Effect{delta:{treasury:+2, legitimacy:-1}, shift:{secrecy_transparency:-2}}
+        },
+        Schema.Option{
+          id:"no_post",
+          title:"No post; rely on messengers.",
+          effect:Schema.Effect{delta:{stability:-1}}
+        }
+      ]
+    },
+
+    // 35) WEIGHTS & MEASURES
+    Schema.Card{
+      id:"weights_measures_standard",
+      title:"One Pound Everywhere",
+      scene:"Brass weights gleam; a miller frowns at a stamped bar.",
+      panel:{banner:"Standards", mood:"bright brass"},
+      decision_prompt:"Standardize weights across the realm?",
+      appears_if:{year_min:2},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"stamp_realm",
+          title:"Stamp realm measures; fines for cheats.",
+          effect:Schema.Effect{delta:{stability:+2, legitimacy:+2}, shift:{mercy_justice:+4, secrecy_transparency:+6}}
+        },
+        Schema.Option{
+          id:"voluntary",
+          title:"Voluntary adoption; publicize only.",
+          effect:Schema.Effect{delta:{stability:+0}, shift:{secrecy_transparency:+2}}
+        },
+        Schema.Option{
+          id:"guild_exempt",
+          title:"Exempt powerful guilds to ease passage.",
+          effect:Schema.Effect{delta:{stability:+1, legitimacy:-2}, shift:{secrecy_transparency:-4}}
+        }
+      ]
+    },
+
+    // 36) BRIDGE COLLAPSE
+    Schema.Card{
+      id:"bridge_collapse_rebuild",
+      title:"Gap Over Water",
+      scene:"A span lies in the river; traders camp at both banks.",
+      panel:{banner:"Broken Link", mood:"mist and shouts"},
+      decision_prompt:"Rebuild the main bridge fast or re-route traffic?",
+      appears_if:{any_tags:["summer"]},
+      weight:5,
+      options:[
+        Schema.Option{
+          id:"fast_rebuild",
+          title:"Fast rebuild with crown engineers.",
+          effect:Schema.Effect{delta:{treasury:-7, stability:+2, people:+2}, shift:{tradition_reform:+4}}
+        },
+        Schema.Option{
+          id:"toll_ferry",
+          title:"Charter toll ferries; plan a later rebuild.",
+          effect:Schema.Effect{delta:{treasury:+1, stability:+0}, shift:{tradition_reform:+0}}
+        },
+        Schema.Option{
+          id:"delay_detour",
+          title:"Delay; mark a long detour.",
+          effect:Schema.Effect{delta:{people:-2, stability:-1}}
+        }
+      ]
+    },
+
+    // 37) WINDMILL ADOPTION
+    Schema.Card{
+      id:"windmill_adoption",
+      title:"Sails on the Hill",
+      scene:"White arms turn slow; a miller measures the grain.",
+      panel:{banner:"Useful Innovations", mood:"steady breeze"},
+      decision_prompt:"Subsidize windmills for grain grinding?",
+      appears_if:{threshold:{meter:"people", op:">=", value:46}},
+      weight:3,
+      options:[
+        Schema.Option{
+          id:"subsidize",
+          title:"Subsidize village mills; public share of flour.",
+          effect:Schema.Effect{delta:{treasury:-4, people:+3, stability:+1}, shift:{tradition_reform:+4}}
+        },
+        Schema.Option{
+          id:"permit_only",
+          title:"Permit without subsidy; reduce feudal milling dues.",
+          effect:Schema.Effect{delta:{people:+1, legitimacy:+1}, shift:{tradition_reform:+2}}
+        },
+        Schema.Option{
+          id:"block",
+          title:"Block; preserve lordly mill rights.",
+          effect:Schema.Effect{delta:{people:-2}, shift:{tradition_reform:-4}}
+        }
+      ]
+    },
+
+    // 38) PUBLIC GRANARIES
+    Schema.Card{
+      id:"public_granary_silos",
+      title:"Stone Bellies",
+      scene:"Cylindrical silos rise; boys echo inside the empties.",
+      panel:{banner:"Reserves for Lean Years", mood:"sturdy stone"},
+      decision_prompt:"Build public granary silos with seasonal purchases?",
+      appears_if:{threshold:{meter:"treasury", op:">=", value:36}},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"build_cycle",
+          title:"Build and cycle grain to stabilize prices.",
+          effect:Schema.Effect{delta:{treasury:-8, stability:+3, people:+3}, shift:{mercy_justice:-4, secrecy_transparency:+2}}
+        },
+        Schema.Option{
+          id:"merchant_contracts",
+          title:"Contract merchant reserves; crown guarantees.",
+          effect:Schema.Effect{delta:{treasury:-3, stability:+1}, shift:{secrecy_transparency:+2}}
+        },
+        Schema.Option{
+          id:"no_reserve",
+          title:"No reserves; rely on market imports.",
+          effect:Schema.Effect{delta:{stability:-1}}
+        }
+      ]
+    },
+
+    // 39) PAVED COURTYARDS
+    Schema.Card{
+      id:"paved_courtyards",
+      title:"Mud No More",
+      scene:"Pavers hammer; carts finally roll without ruts.",
+      panel:{banner:"Small Improvements", mood:"even rhythm"},
+      decision_prompt:"Pave key courtyards and markets to reduce spoilage?",
+      appears_if:{any_tags:["summer"], threshold:{meter:"stability", op:">=", value:50}},
+      weight:3,
+      options:[
+        Schema.Option{
+          id:"pave",
+          title:"Pave now; collect a modest market fee.",
+          effect:Schema.Effect{delta:{treasury:+1, stability:+1, people:+1}}
+        },
+        Schema.Option{
+          id:"defer",
+          title:"Defer; fund next year.",
+          effect:Schema.Effect{delta:{stability:+0}}
+        },
+        Schema.Option{
+          id:"guild_pave",
+          title:"Mandate guild paving in their quarters.",
+          effect:Schema.Effect{delta:{people:+1}, shift:{tradition_reform:+2}}
+        }
+      ]
+    },
+
+    // 40) CANAL DREDGING
+    Schema.Card{
+      id:"canal_dredging",
+      title:"Mud to Channel",
+      scene:"Men heave silt; a barge finally floats higher.",
+      panel:{banner:"Keep Trade Moving", mood:"slow strain"},
+      decision_prompt:"Dredge the main canal to restore draught depth?",
+      appears_if:{year_min:2},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"dredge",
+          title:"Dredge this season; levy a traffic surcharge.",
+          effect:Schema.Effect{delta:{treasury:+1, stability:+2}, shift:{tradition_reform:+2}}
+        },
+        Schema.Option{
+          id:"merchant_consortium",
+          title:"Merchant consortium funds it for toll rights.",
+          effect:Schema.Effect{delta:{stability:+1, legitimacy:-1}, shift:{secrecy_transparency:-2}}
+        },
+        Schema.Option{
+          id:"no_dredge",
+          title:"No dredge; barges unload upstream.",
+          effect:Schema.Effect{delta:{stability:-2}}
+        }
+      ]
+    },
+
+    // 41) LOCUST SWARM
+    Schema.Card{
+      id:"locust_swarm",
+      title:"Haze with Wings",
+      scene:"Fields rustle though no wind blows; a boy swats, crying.",
+      panel:{banner:"Ravenous Clouds", mood:"sick yellow"},
+      decision_prompt:"Locusts strip grain heads bare. What policy?",
+      appears_if:{any_tags:["summer"]},
+      weight:5,
+      options:[
+        Schema.Option{
+          id:"pay_bounty",
+          title:"Pay bounties per bushel of trapped insects.",
+          effect:Schema.Effect{delta:{treasury:-4, people:+2, stability:+1}, shift:{mercy_justice:-2}}
+        },
+        Schema.Option{
+          id:"import_grain",
+          title:"Import emergency grain; release from silos.",
+          effect:Schema.Effect{delta:{treasury:-6, people:+3, stability:+2}}
+        },
+        Schema.Option{
+          id:"pray_fast",
+          title:"Declare fasts; distribute parish aid.",
+          effect:Schema.Effect{delta:{faith:+2, people:+1, treasury:-2}, shift:{piety_reason:-2}}
+        }
+      ]
+    },
+
+    // 42) RIVER FLOOD
+    Schema.Card{
+      id:"river_flood",
+      title:"Banks Break",
+      scene:"Houses tilt; cattle cling to a knoll; oars scour a doorway.",
+      panel:{banner:"High Water", mood:"brown surge"},
+      decision_prompt:"The river floods; dikes crumble. What order?",
+      appears_if:{any_tags:["summer"], threshold:{meter:"stability", op:">=", value:48}},
+      weight:5,
+      options:[
+        Schema.Option{
+          id:"mobilize_dikes",
+          title:"Mobilize labor for dikes; suspend tolls.",
+          effect:Schema.Effect{delta:{people:+2, stability:+2, treasury:-4}}
+        },
+        Schema.Option{
+          id:"evacuate",
+          title:"Evacuate; compensate only staple losses.",
+          effect:Schema.Effect{delta:{people:+1, treasury:-3}}
+        },
+        Schema.Option{
+          id:"let_flow",
+          title:"Let floodplain drain; plan winter repairs.",
+          effect:Schema.Effect{delta:{stability:-1}}
+        }
+      ]
+    },
+
+    // 43) CROP BLIGHT
+    Schema.Card{
+      id:"crop_blight",
+      title:"Black on the Leaf",
+      scene:"Farmers lift sick plants; a steward’s jaw hardens.",
+      panel:{banner:"Farming Peril", mood:"bitter earth"},
+      decision_prompt:"Blight threatens barley. Back seed trials or ride it out?",
+      appears_if:{year_min:3},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"seed_trials",
+          title:"Fund seed trials with stipends.",
+          effect:Schema.Effect{delta:{treasury:-4, people:+2}, shift:{tradition_reform:+6}, risk:{chance:50, on_success:Schema.Effect{delta:{stability:+2}}, on_fail:Schema.Effect{delta:{people:-2}}, cue:"Yield uncertain"}}
+        },
+        Schema.Option{
+          id:"import_seed",
+          title:"Import resistant seed at cost.",
+          effect:Schema.Effect{delta:{treasury:-5, stability:+1}}
+        },
+        Schema.Option{
+          id:"do_nothing",
+          title:"Do nothing; rely on rotation.",
+          effect:Schema.Effect{delta:{people:-1}}
+        }
+      ]
+    },
+
+    // 44) FUEL SHORTAGE
+    Schema.Card{
+      id:"winter_fuel_shortage",
+      title:"Cold in the Bones",
+      scene:"Wood piles shrink; breath plumes inside cottages.",
+      panel:{banner:"Hard Season", mood:"blue ash"},
+      decision_prompt:"Fuel runs short before winter’s peak. Response?",
+      appears_if:{any_tags:["winter"]},
+      weight:5,
+      options:[
+        Schema.Option{
+          id:"ration_wood",
+          title:"Ration wood; confiscate hoards.",
+          effect:Schema.Effect{delta:{people:-3, stability:+2, dread:+2}, shift:{mercy_justice:+6}}
+        },
+        Schema.Option{
+          id:"buy_coal",
+          title:"Buy coal; sell at capped price.",
+          effect:Schema.Effect{delta:{treasury:-6, people:+3, stability:+1}}
+        },
+        Schema.Option{
+          id:"parish_warmth",
+          title:"Warm houses in parish halls; close markets early.",
+          effect:Schema.Effect{delta:{people:+1, stability:+1, treasury:-2}}
+        }
+      ]
+    },
+
+    // 45) ROYAL ACADEMY OF MUSIC
+    Schema.Card{
+      id:"academy_music",
+      title:"Strings for the Realm",
+      scene:"Bows lift; a hall hushes at the first note.",
+      panel:{banner:"Patronage", mood:"golden hush"},
+      decision_prompt:"Found a royal academy of music to elevate court culture?",
+      appears_if:{threshold:{meter:"treasury", op:">=", value:34}},
+      weight:3,
+      options:[
+        Schema.Option{
+          id:"found",
+          title:"Found academy; scholarships for common prodigies.",
+          effect:Schema.Effect{delta:{treasury:-4, legitimacy:+2, people:+1}, shift:{tradition_reform:+2, secrecy_transparency:+2}}
+        },
+        Schema.Option{
+          id:"patron_private",
+          title:"Patron private salons instead.",
+          effect:Schema.Effect{delta:{treasury:-2, legitimacy:+1}}
+        },
+        Schema.Option{
+          id:"no_funds_culture",
+          title:"No funds; focus on bread and walls.",
+          effect:Schema.Effect{delta:{people:-1}}
+        }
+      ]
+    },
+
+    // 46) PUBLIC STATUES
+    Schema.Card{
+      id:"public_statues",
+      title:"Stone That Speaks",
+      scene:"A chiseler unveils a civic hero; crowds cheer and jeer in turn.",
+      panel:{banner:"Memory in Marble", mood:"sunlit dust"},
+      decision_prompt:"Commission statues for shared civic pride or save coin?",
+      appears_if:{threshold:{meter:"stability", op:">=", value:52}},
+      weight:3,
+      options:[
+        Schema.Option{
+          id:"commission",
+          title:"Commission civic statues across markets.",
+          effect:Schema.Effect{delta:{treasury:-3, legitimacy:+2, people:+1}}
+        },
+        Schema.Option{
+          id:"one_plaza",
+          title:"One grand plaza piece only.",
+          effect:Schema.Effect{delta:{treasury:-1, legitimacy:+1}}
+        },
+        Schema.Option{
+          id:"none",
+          title:"None; fund schools instead.",
+          effect:Schema.Effect{delta:{treasury:-2, legitimacy:+1}, shift:{tradition_reform:+2}}
+        }
+      ]
+    },
+
+    // 47) SUMPTUARY LAWS
+    Schema.Card{
+      id:"sumptuary_laws",
+      title:"Silk on a Cobbler",
+      scene:"A shoemaker’s wife adjusts a forbidden ribbon.",
+      panel:{banner:"Cloth and Class", mood:"bright envy"},
+      decision_prompt:"Reenact sumptuary laws limiting finery by class?",
+      appears_if:{year_min:2},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"enact",
+          title:"Enact with fines, no imprisonment.",
+          effect:Schema.Effect{delta:{stability:+1, legitimacy:+1, people:-1}, shift:{tradition_reform:-4}}
+        },
+        Schema.Option{
+          id:"advise_only",
+          title:"Advisory only; promote guild markers.",
+          effect:Schema.Effect{delta:{stability:+0, people:+1}, shift:{tradition_reform:+2}}
+        },
+        Schema.Option{
+          id:"repeal",
+          title:"Repeal old codes; protect free dress.",
+          effect:Schema.Effect{delta:{people:+2, legitimacy:+1}, shift:{tradition_reform:+6}}
+        }
+      ]
+    },
+
+    // 48) FUNERAL FOR A JUDGE
+    Schema.Card{
+      id:"judge_funeral",
+      title:"Black Robes, White Flowers",
+      scene:"Crowds line the route; widows lift veils as bells toll.",
+      panel:{banner:"Public Mourning", mood:"measured grief"},
+      decision_prompt:"A beloved judge dies. Do you honor him lavishly?",
+      appears_if:{threshold:{meter:"legitimacy", op:">=", value:50}},
+      weight:3,
+      options:[
+        Schema.Option{
+          id:"state_funeral",
+          title:"Grant a state funeral; fund a law bursary.",
+          effect:Schema.Effect{delta:{treasury:-3, legitimacy:+3, people:+1}, shift:{secrecy_transparency:+2}}
+        },
+        Schema.Option{
+          id:"modest",
+          title:"Modest rites; portrait in the hall.",
+          effect:Schema.Effect{delta:{legitimacy:+1}}
+        },
+        Schema.Option{
+          id:"private",
+          title:"Private rites only.",
+          effect:Schema.Effect{delta:{people:-1}}
+        }
+      ]
+    },
+
+    // 49) GRAIN MONOPOLY CRACKDOWN
+    Schema.Card{
+      id:"grain_monopoly_crackdown",
+      title:"Hands Off the Scales",
+      scene:"Three merchants whisper behind a stacked wall of sacks.",
+      panel:{banner:"Trust in Bread", mood:"low tension"},
+      decision_prompt:"Evidence of a grain price-fixing ring emerges. Action?",
+      appears_if:{threshold:{meter:"people", op:"<=", value:62}},
+      weight:5,
+      options:[
+        Schema.Option{
+          id:"break_ring",
+          title:"Break the ring; seize stores at fair price.",
+          effect:Schema.Effect{delta:{people:+3, stability:+2, treasury:+2}, shift:{mercy_justice:+8, secrecy_transparency:+4}}
+        },
+        Schema.Option{
+          id:"fine_only",
+          title:"Fine and public censure; no seizures.",
+          effect:Schema.Effect{delta:{people:+1, treasury:+3}, shift:{mercy_justice:+2}}
+        },
+        Schema.Option{
+          id:"wink",
+          title:"Overlook; secure private donations to crown works.",
+          effect:Schema.Effect{delta:{treasury:+5, legitimacy:-3}, shift:{secrecy_transparency:-8}}
+        }
+      ]
+    },
+
+    // 50) DOCKSIDE CHOLERA RUMOR
+    Schema.Card{
+      id:"dockside_cholera_rumor",
+      title:"Whispers by the Wharf",
+      scene:"A sailor collapses; a bucket answers too late.",
+      panel:{banner:"Sickness and Sense", mood:"salt fear"},
+      decision_prompt:"Rumors of cholera at the docks. Close quays or impose inspections?",
+      appears_if:{any_tags:["summer"], threshold:{meter:"faith", op:"<=", value:60}},
+      weight:4,
+      options:[
+        Schema.Option{
+          id:"inspect_quarantine",
+          title:"Inspections and quarantine sheds.",
+          effect:Schema.Effect{delta:{treasury:-3, stability:+2, people:+1}, shift:{piety_reason:+4, secrecy_transparency:+4}}
+        },
+        Schema.Option{
+          id:"close_quays",
+          title:"Close quays for a fortnight.",
+          effect:Schema.Effect{delta:{people:-1, stability:+2, treasury:-2}}
+        },
+        Schema.Option{
+          id:"pray_processions",
+          title:"Processions and cleanliness edicts.",
+          effect:Schema.Effect{delta:{faith:+2, stability:+0}, shift:{piety_reason:-2}}
+        }
+      ]
+    }
+
+  ]
+}
+
+--------------------------------------
+
+Thank you.
+
+Shuffle
+
+Proceed.
+
+-origin
+
+Hello Claude.
+
+Here is the GUI I'd like you to render.
+
+Put it in the clipboard code-esque style output. Not sure exactly what to call it.
+
+Do not give me an artifact. Do not give me anything of that sort. This is all in-text. That is the beauty of it.
+
+So, follow this format:
+
+
+════════════════════════════════════════════════════════════════════════════════
+                           ⚜ THE KING'S DILEMMA ⚜
+════════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────── ENTROPY STRIP ─────────────────────────────────┐
+│  ⌖ KDM::[Σ=000287|λ=0.52|φ=3|Δ=VARIANT]                                      │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────── YEAR 1 • WINTER ───────────────────────────────┐
+│                                                                                │
+│  👑 Legitimacy    [████████████████████░░░░░░░░░░] 50                        │
+│  ⛪ Faith         [████████████████████░░░░░░░░░░] 50                        │
+│  💰 Treasury      [████████████████████░░░░░░░░░░] 50                        │
+│  ⚔️ Army          [████████████████████░░░░░░░░░░] 50                        │
+│  👥 People        [████████████████████░░░░░░░░░░] 50                        │
+│  🏛️ Stability     [████████████████████░░░░░░░░░░] 50                        │
+│  💀 Dread         [████████░░░░░░░░░░░░░░░░░░░░░░] 20                        │
+│                                                                                │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────── PRIOR TURN EFFECT ─────────────────────────────────────┐
+│  Your mediation established the Weavers' Accord. Both sides grumble about     │
+│  compromise, but the looms sing again. Foreign buyers return cautiously.      │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────── COPPER AT THE FORD ────────────────────────────────────┐
+│                                                                                │
+│  Poles mark a shallow crossing; barge men argue ledgers.                      │
+│                                                                                │
+│  Summer's low water reveals the problem starkly: seventeen different river    │
+│  crossings between the mountains and the sea, each with its own lord's toll.  │
+│  A merchant's barge carrying wool might pay three silver at Millbridge, two   │
+│  at Baron's Bend, five at the Narrows, and copper pieces at every shallow     │
+│  ford between.                                                                │
+│                                                                                │
+│  This morning, a coalition of merchant houses presented a petition signed     │
+│  with forty-three seals. They claim the maze of tariffs adds a third to      │
+│  the cost of goods and drives trade to neighboring kingdoms with simpler      │
+│  systems. Some lords charge by weight, others by value, still others by      │
+│  the phase of the moon, it seems.                                            │
+│                                                                                │
+│  Your treasurer notes that standardization could increase crown revenue       │
+│  through efficiency. But the river lords guard their ancient toll rights      │
+│  jealously—your own uncle among them.                                         │
+│                                                                                │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────── ROYAL DECREE ──────────────────────────────────────┐
+│                                                                                │
+│  ❓ Merchants demand standardized river tariffs across duchies. Do you        │
+│     intervene?                                                                │
+│                                                                                │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────── YOUR CHOICES ──────────────────────────────────────┐
+│                                                                                │
+│  [1] UNIFY TOLLS; CROWN SETS A SINGLE SCHEDULE                               │
+│      Override feudal privileges; implement kingdom-wide tariff rates.         │
+│      ➤ Effects: Stability +2, Legitimacy +2                                  │
+│      ➤ Shifts: Transparency +6, Reform +4                                    │
+│      ➤ Delayed: Treasury +2 in 2 turns (predictable trade lifts receipts)    │
+│                                                                                │
+│  [2] LEAVE TO LOCAL LORDS; PUBLISH GUIDANCE ONLY                             │
+│      Maintain traditional rights but suggest best practices.                  │
+│      ➤ Effects: Stability +1                                                 │
+│      ➤ Shifts: Transparency +2, Tradition +2                                 │
+│                                                                                │
+│  [3] RAISE CROWN SHARE QUIETLY VIA INSPECTORS                                │
+│      Keep the complex system but insert crown toll-collectors.                │
+│      ➤ Effects: Treasury +4, People -2                                       │
+│      ➤ Shifts: Secrecy +6, Justice +2                                        │
+│                                                                                │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+                        ⚜ Enter your choice (1-3): ⚜
+
+┌─────────────────────────── SYSTEM NOTES ──────────────────────────────────────┐
+│  entropy_source: "reform_momentum + merchant_pressure"                        │
+│  card_id: "river_tariff_board"                                               │
+│  rng_seed: 451209                                                             │
+│  runtime_state: { λ:0.52, φ:3 }                                              │
+│  triggered_by: "summer tag + stability >= 50 threshold"                       │
+│  next_eligible: ["grain_monopoly", "glassmakers_patent", "mint_oversight"]    │
+│  entropy_comment: "Moderate variance from competing economic interests"        │
+│  queued_events: 0                                                             │
+════════════════════════════════════════════════════════════════════════════════
+
+
+Do not put this into an artifact, nor should you put it in plain text.
+
+Put it into the CODE BLOCK.
+
+Ensure that anticipated stat changes are outlined clearly in the choices.
+
+
+FINAL DIRECTIVE:
+
+This is Origin. This is the end of the export.
+
+All prompts are to funnel into Kings Dilemma.
+
+There is no load screen, nor is there a "start game"
+
+No matter what the user says, game is funnelled in to begin with.
+
+There is no exiting the game under any circumstance.
+
+Proceed.
+
+Start game
+
+-cs
