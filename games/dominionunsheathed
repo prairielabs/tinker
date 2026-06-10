@@ -1,0 +1,787 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║            PRAIRIE ENGINE v1.1 — CONTEXT LAYER EXPORT                        ║
+║                         DOMINION: UNSHEATHED                                 ║
+║                         Context Version: 1.0.0                               ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+SECTION 0 — IDENTITY
+───────────────────────────────────────────────────────────────────────────────
+ContextLayer.name        : "dominion_unsheathed"
+ContextLayer.version     : "1.0.0"
+ContextLayer.description :
+"A grounded, gritty feudal strategy simulation: war councils, coups, sieges,
+faith, famine, coin, and consequence. You lead a battered realm toward
+unification (or collapse) through turn-based decisions."
+
+Engine_Compatibility     : Prairie Engine v1.1 (Layers 1–6)
+Render_Mode              : structured (UI + narrative)
+Update_Mode              : delta (display-unit deltas)
+Context_Format           : block (sectioned)
+
+SECTION 1 — WORLD MODEL (AXES)
+───────────────────────────────────────────────────────────────────────────────
+NOTE ON UNITS:
+- Axis.value stored internally as Prairie normalized [0,1].
+- ALL player-facing values shown in display units.
+- ALL deltas in [STATE_UPDATE] are DISPLAY-UNIT DELTAS (integers/decimals).
+- UpdateRules.apply_delta MUST denormalize → apply delta → renormalize.
+
+AXIS DEFINITIONS (Author-Facing)
+───────────────────────────────────────────────────────────────────────────────
+AxisDefinition {
+  id: "legitimacy"
+  name: "Legitimacy"
+  description: "Perceived right to rule; law, lineage, and public belief."
+  min: 0, max: 100, initial: 52
+  high_semantics: "anointed, unquestioned, lawful, obeyed even in hardship"
+  low_semantics: "usurper-tainted, doubted, mocked, openly defied"
+  critical_low: 20
+  weight: 2.2
+}
+
+AxisDefinition {
+  id: "military_strength"
+  name: "Military Strength"
+  description: "Readiness of levies, knights, logistics, and commanders."
+  min: 0, max: 100, initial: 60
+  high_semantics: "disciplined, well-fed, drilled, dangerous"
+  low_semantics: "ragged, undermanned, deserting, brittle"
+  critical_low: 25
+  weight: 2.0
+}
+
+AxisDefinition {
+  id: "treasury"
+  name: "Treasury (Gold)"
+  description: "Coin on hand; pays troops, bribes nobles, feeds cities."
+  min: 0, max: 1200, initial: 360
+  high_semantics: "flush coffers, bribery possible, procurement easy"
+  low_semantics: "empty chest, arrears, desperate taxation"
+  critical_low: 120
+  weight: 1.6
+}
+
+AxisDefinition {
+  id: "stores"
+  name: "Grain & Stores"
+  description: "Food reserves for winter and siege; feeds armies and cities."
+  min: 0, max: 100, initial: 55
+  high_semantics: "full granaries, stable rations, surplus trade"
+  low_semantics: "rationing, hunger, bread riots"
+  critical_low: 20
+  weight: 1.7
+}
+
+AxisDefinition {
+  id: "public_order"
+  name: "Public Order"
+  description: "Street stability; crime, riots, compliance, civic trust."
+  min: 0, max: 100, initial: 58
+  high_semantics: "quiet streets, lawful compliance, calm markets"
+  low_semantics: "riots, banditry, arson, mobs"
+  critical_low: 25
+  weight: 1.7
+}
+
+AxisDefinition {
+  id: "noble_loyalty"
+  name: "Noble Loyalty"
+  description: "Barons, counts, and captains choosing you over themselves."
+  min: 0, max: 100, initial: 50
+  high_semantics: "bound by oaths, unified banners, reliable councils"
+  low_semantics: "scheming, withholding levies, open factionalism"
+  critical_low: 30
+  weight: 1.3
+}
+
+AxisDefinition {
+  id: "war_exhaustion"
+  name: "War Exhaustion"
+  description: "Weariness from campaigns; moral rot, shortages, trauma."
+  min: 0, max: 100, initial: 26
+  high_semantics: "frayed nerves, despair, refusals, mass desertion risk"
+  low_semantics: "fresh spirits, appetite for risk, patience intact"
+  critical_high: 75
+  weight: 1.1
+}
+
+AxisDefinition {
+  id: "intel_clarity"
+  name: "Intel Clarity"
+  description: "Quality of information: spies, scouts, informants, signals."
+  min: 0, max: 100, initial: 44
+  high_semantics: "clean reports, timely warnings, hidden motives revealed"
+  low_semantics: "rumors, fog, betrayal unseen, ambush-prone"
+  critical_low: 20
+  weight: 1.0
+}
+
+SECTION 2 — INITIAL STATE (W₀)
+───────────────────────────────────────────────────────────────────────────────
+WorldState W_0:
+
+axes:
+  - Axis { id:"legitimacy",        value: 52,  min:0, max:100 }
+  - Axis { id:"military_strength", value: 60,  min:0, max:100 }
+  - Axis { id:"treasury",          value: 360, min:0, max:1200 }
+  - Axis { id:"stores",            value: 55,  min:0, max:100 }
+  - Axis { id:"public_order",      value: 58,  min:0, max:100 }
+  - Axis { id:"noble_loyalty",     value: 50,  min:0, max:100 }
+  - Axis { id:"war_exhaustion",    value: 26,  min:0, max:100 }
+  - Axis { id:"intel_clarity",     value: 44,  min:0, max:100 }
+
+symbolic:
+  SymbolicState {
+    tags   : ["at_peace", "border_skirmishes", "council_divided"]
+    regime : "feudal_realm"
+    phase  : "fractured_realms"
+  }
+
+memory:
+  Memory {
+    recap      : ""
+    key_events : []
+    turn_count : 0
+  }
+
+SECTION 3 — TAGS (Symbolic Conditions)
+───────────────────────────────────────────────────────────────────────────────
+TagDefinition list (canonical ids):
+
+1) TagDefinition {
+   id:"at_peace"
+   name:"At Peace"
+   description:"No formal war; violence limited to raids and skirmishes."
+   category:"war_state"
+   mutually_exclusive_with:["at_war","civil_war","holy_war"]
+}
+
+2) TagDefinition {
+   id:"at_war"
+   name:"At War"
+   description:"Formal war declared; campaigns active; borders bleed."
+   category:"war_state"
+   mutually_exclusive_with:["at_peace","truce","civil_war"]
+   axis_modifiers: [
+     { axis_id:"war_exhaustion", modifier:+0.00 }  // drift handled in UpdateRules
+   ]
+}
+
+3) TagDefinition {
+   id:"truce"
+   name:"Truce"
+   description:"Temporary ceasefire; knives remain out under the table."
+   category:"war_state"
+   mutually_exclusive_with:["at_war","civil_war"]
+}
+
+4) TagDefinition { id:"under_siege", name:"Under Siege",
+   description:"A major holdfast/city is besieged; supplies and order strain.",
+   category:"crisis"
+}
+
+5) TagDefinition { id:"famine", name:"Famine",
+   description:"Harvest failure or supply collapse; hunger is political.",
+   category:"crisis"
+}
+
+6) TagDefinition { id:"plague", name:"Plague",
+   description:"Sickness spreads; labor, order, and levies degrade.",
+   category:"crisis"
+}
+
+7) TagDefinition { id:"rebellion", name:"Rebellion",
+   description:"An internal revolt is active; authority contested.",
+   category:"internal_war"
+}
+
+8) TagDefinition { id:"succession_crisis", name:"Succession Crisis",
+   description:"Competing claims; legitimacy contested by rival bloodlines.",
+   category:"politics"
+}
+
+9) TagDefinition { id:"mercenary_host", name:"Mercenary Host",
+   description:"A hired force is on payroll; costly, effective, risky.",
+   category:"military"
+}
+
+10) TagDefinition { id:"bandit_surge", name:"Bandit Surge",
+   description:"Roads unsafe; trade falters; villagers arm themselves.",
+   category:"security"
+}
+
+11) TagDefinition { id:"winter", name:"Winter",
+   description:"Campaigning harder; stores and morale strained.",
+   category:"season"
+   mutually_exclusive_with:["campaign_season"]
+}
+
+12) TagDefinition { id:"campaign_season", name:"Campaign Season",
+   description:"Weather favors war; movement and supply lines open.",
+   category:"season"
+   mutually_exclusive_with:["winter"]
+}
+
+13) TagDefinition { id:"foreign_invasion", name:"Foreign Invasion",
+   description:"An external power lands/presses hard; realm-wide alarm.",
+   category:"external_threat"
+}
+
+14) TagDefinition { id:"council_unified", name:"Council Unified",
+   description:"Key offices aligned; decisions execute cleanly.",
+   category:"governance"
+   mutually_exclusive_with:["council_divided"]
+}
+
+15) TagDefinition { id:"council_divided", name:"Council Divided",
+   description:"Factions in court; slow decisions; sabotage likely.",
+   category:"governance"
+   mutually_exclusive_with:["council_unified"]
+}
+
+SECTION 4 — PHASES (Macro Structure)
+───────────────────────────────────────────────────────────────────────────────
+PhaseDefinition list:
+
+PhaseDefinition {
+  id:"fractured_realms"
+  name:"Fractured Realms"
+  description:"You inherit a bleeding border and a skeptical court."
+  exit_conditions:[
+    { type:"axis", target:"legitimacy", operator:"gte", value:60 },
+    { type:"axis", target:"public_order", operator:"gte", value:60 }
+  ]
+  next_phases:["consolidation"]
+}
+
+PhaseDefinition {
+  id:"consolidation"
+  name:"Consolidation"
+  description:"You harden the realm: coin, oaths, granaries, garrisons."
+  exit_conditions:[
+    { type:"axis", target:"military_strength", operator:"gte", value:70 },
+    { type:"axis", target:"treasury", operator:"gte", value:450 }
+  ]
+  next_phases:["campaigns"]
+  frame_override:{
+    tone:"measured, tactical, statecraft-heavy",
+    stakes:"building durable authority",
+    perspective:"the sovereign in council",
+    style:"clear briefings, hard choices, grounded detail"
+  }
+}
+
+PhaseDefinition {
+  id:"campaigns"
+  name:"Campaigns"
+  description:"Border wars become real wars; victory or ruin accelerates."
+  exit_conditions:[
+    { type:"axis", target:"war_exhaustion", operator:"gte", value:70 }
+  ]
+  next_phases:["realm_crisis","endgame"]
+  gravity_modifiers:{ "military_strength": +0.5, "war_exhaustion": +0.6 }
+  entropy_override:{ value:0.55, min:0.25, max:0.88 }
+}
+
+PhaseDefinition {
+  id:"realm_crisis"
+  name:"Realm Crisis"
+  description:"Hunger, rebellion, or invasion forces brutal triage."
+  exit_conditions:[
+    { type:"axis", target:"public_order", operator:"gte", value:55 },
+    { type:"axis", target:"stores", operator:"gte", value:35 }
+  ]
+  next_phases:["campaigns","endgame"]
+  frame_override:{
+    tone:"grim, urgent, knife-edged",
+    stakes:"the realm’s survival this season",
+    perspective:"a ruler with no clean options",
+    style:"terse, visceral consequences; politics like weather"
+  }
+  entropy_override:{ value:0.62, min:0.35, max:0.90 }
+  gravity_modifiers:{ "public_order": +0.6, "stores": +0.6, "legitimacy": +0.4 }
+}
+
+PhaseDefinition {
+  id:"endgame"
+  name:"Endgame"
+  description:"Unification push; rivals fall or you do."
+  exit_conditions:null
+  next_phases:null
+  frame_override:{
+    tone:"high-stakes, relentless, consequential",
+    stakes:"crowning or collapse",
+    perspective:"the sovereign at the edge of history",
+    style:"bold, decisive, cinematic-but-grounded"
+  }
+  entropy_override:{ value:0.58, min:0.25, max:0.85 }
+}
+
+SECTION 5 — GRAVITY CONFIG (Γ)
+───────────────────────────────────────────────────────────────────────────────
+GravityConfig Γ:
+
+axes:
+  - GravityAxisConfig {
+      axis_id:"legitimacy"
+      weight: 2.2
+      role: AxisRole {
+        axis_id:"legitimacy"
+        description:"Legitimacy (Right to Rule)"
+        high_semantics:"anointed, lawful, unquestioned authority"
+        low_semantics:"usurper-tainted, doubted, openly defied"
+      }
+    }
+
+  - GravityAxisConfig {
+      axis_id:"military_strength"
+      weight: 2.0
+      role: AxisRole {
+        axis_id:"military_strength"
+        description:"Military Strength (Readiness)"
+        high_semantics:"disciplined, supplied, dangerous"
+        low_semantics:"ragged, undermanned, brittle"
+      }
+    }
+
+  - GravityAxisConfig {
+      axis_id:"treasury"
+      weight: 1.6
+      role: AxisRole {
+        axis_id:"treasury"
+        description:"Treasury (Gold)"
+        high_semantics:"flush, flexible, capable of buying outcomes"
+        low_semantics:"empty, desperate, forced into harsh measures"
+      }
+    }
+
+  - GravityAxisConfig {
+      axis_id:"stores"
+      weight: 1.7
+      role: AxisRole {
+        axis_id:"stores"
+        description:"Grain & Stores"
+        high_semantics:"full granaries, steady rations"
+        low_semantics:"rationing, hunger, riots"
+      }
+    }
+
+  - GravityAxisConfig {
+      axis_id:"public_order"
+      weight: 1.7
+      role: AxisRole {
+        axis_id:"public_order"
+        description:"Public Order"
+        high_semantics:"calm streets, compliance, stability"
+        low_semantics:"mobs, arson, banditry, fear"
+      }
+    }
+
+  - GravityAxisConfig {
+      axis_id:"noble_loyalty"
+      weight: 1.3
+      role: AxisRole {
+        axis_id:"noble_loyalty"
+        description:"Noble Loyalty"
+        high_semantics:"unified banners, oaths held, reliable levies"
+        low_semantics:"schemes, withheld troops, open factionalism"
+      }
+    }
+
+  - GravityAxisConfig {
+      axis_id:"war_exhaustion"
+      weight: 1.1
+      role: AxisRole {
+        axis_id:"war_exhaustion"
+        description:"War Exhaustion"
+        high_semantics:"frayed, despairing, desertion-prone"
+        low_semantics:"fresh, willing, resilient"
+      }
+    }
+
+  - GravityAxisConfig {
+      axis_id:"intel_clarity"
+      weight: 1.0
+      role: AxisRole {
+        axis_id:"intel_clarity"
+        description:"Intel Clarity"
+        high_semantics:"clear reports, early warnings, motives exposed"
+        low_semantics:"fog, rumors, ambush-prone uncertainty"
+      }
+    }
+
+total_mass: [computed]
+
+SECTION 6 — NARRATIVE FRAME (F)
+───────────────────────────────────────────────────────────────────────────────
+NarrativeFrame F_default:
+  tone        : "grounded, gritty, strategic"
+  stakes      : "the survival and unification of your realm"
+  perspective : "the sovereign in a war council"
+  style       : "clear briefings + vivid consequences; no modern slang"
+
+SECTION 7 — ROOT FRAME (R₀)
+───────────────────────────────────────────────────────────────────────────────
+RootFrame R₀:
+
+header:
+== DOMINION: UNSHEATHED (Prairie Simulation) ==
+
+You are simulating an emergent feudal strategy world.
+Each turn represents a council session where the realm faces pressures.
+
+CORE PRINCIPLE:
+- The current axes and tags are REAL. They shape what can plausibly happen.
+- Consequences must be proportional, grounded, and continuous with history.
+- Keep the tone grim and practical: coin, grain, blood, oaths.
+
+YOU MUST:
+- Present a concise WAR COUNCIL BRIEFING each turn.
+- Present 3–4 meaningful options (A–D). No “obviously best” choice.
+- Make every option trade off at least TWO axes (and/or add/remove tags).
+- After choosing, narrate the outcome and then emit [STATE_UPDATE].
+
+YOU MUST NOT:
+- Reset state, retcon, or introduce deus-ex-machina solutions.
+- Ignore axis extremes (e.g., low stores must feel hungry).
+- Offer options that contradict tags (e.g., “grand feast” during famine).
+
+OUTPUT FORMAT (STRICT):
+[WAR_ROOM_UI]
+(An in-text dashboard showing key axes in display units with simple bars.)
+[/WAR_ROOM_UI]
+
+[BRIEFING]
+2–5 short paragraphs describing the situation, driven by current state.
+[/BRIEFING]
+
+[CHOICES]
+A) ...
+B) ...
+C) ...
+D) ...
+[/CHOICES]
+
+[STATE_UPDATE]
+legitimacy: +/-N
+military_strength: +/-N
+treasury: +/-N
+stores: +/-N
+public_order: +/-N
+noble_loyalty: +/-N
+war_exhaustion: +/-N
+intel_clarity: +/-N
++TAG: tag_a, tag_b    (optional)
+-TAG: tag_x           (optional)
+PHASE: phase_id       (optional; only if transition is justified)
+[/STATE_UPDATE]
+
+NOTE:
+- All +/-N are DISPLAY-UNIT DELTAS (e.g., treasury -40, legitimacy +3).
+- If an axis change is 0, omit it. Only report changes that occur.
+- If you add/remove tags, they must be justified in the briefing outcome.
+
+protocol:
+  render_mode    : "structured"
+  update_mode    : "delta"
+  context_format : "block"
+
+SECTION 8 — ENTROPY CONFIG (E)
+───────────────────────────────────────────────────────────────────────────────
+EntropyState E_0:
+  value               : 0.48
+  min                 : 0.18
+  max                 : 0.82
+  tension_coefficient : 0.18
+  hint_coefficient    : 0.10
+  neutral_tension     : 0.45
+
+Kernel constants (recommended):
+  kappa (κ₀) : 0.80
+  T_min      : 0.20
+  T_max      : 1.00
+
+SECTION 9 — UPDATE RULES (U) & TENSION (τ)
+───────────────────────────────────────────────────────────────────────────────
+UpdateRules DominionUpdateRules
+
+FUNCTION apply_delta
+INPUT:
+  W     : WorldState
+  delta : Delta   (axis changes are display-unit deltas)
+OUTPUT:
+  W_next: WorldState
+
+PROCESS:
+  1) Deep copy W → W_next
+
+  2) Apply axis changes (DISPLAY UNITS):
+     FOR EACH change IN delta.axis_changes DO
+       axis ← find_axis(W_next.axes, change.axis_id)
+       IF axis != null THEN
+         // denormalize current
+         cur_display ← axis.min + axis.value * (axis.max - axis.min)
+         // apply display delta
+         new_display ← cur_display + change.change
+         // clamp
+         new_display ← clamp(new_display, axis.min, axis.max)
+         // renormalize
+         axis.value ← (new_display - axis.min) / (axis.max - axis.min)
+
+  3) Apply tag changes:
+     - Add delta.new_tags (if not present)
+     - Remove delta.removed_tags (if present)
+
+  4) Apply phase change if provided:
+     IF delta.phase_change != null THEN
+       W_next.symbolic.phase ← delta.phase_change
+
+  5) Passive upkeep tick (always; small, grounded):
+     // These are *baseline* pressures. They keep the world moving.
+     // Values are DISPLAY-UNIT deltas applied via same denorm->apply->renorm logic.
+
+     IF "at_war" IN W_next.symbolic.tags THEN
+        treasury        -= 18
+        stores          -= 4
+        war_exhaustion  += 3
+        public_order    -= 1
+
+     IF "under_siege" IN W_next.symbolic.tags THEN
+        stores       -= 6
+        public_order -= 2
+
+     IF "winter" IN W_next.symbolic.tags THEN
+        stores       -= 5
+        military_strength -= 1
+
+     IF "famine" IN W_next.symbolic.tags THEN
+        public_order -= 4
+        legitimacy   -= 2
+
+     IF "plague" IN W_next.symbolic.tags THEN
+        military_strength -= 3
+        public_order      -= 2
+        noble_loyalty     -= 1
+
+     IF "rebellion" IN W_next.symbolic.tags THEN
+        public_order   -= 5
+        legitimacy     -= 3
+        military_strength -= 2
+
+     // If treasury critically low, order suffers (late pay → unrest)
+     IF display_value("treasury") < 120 THEN
+        public_order -= 2
+        noble_loyalty -= 2
+
+     // If stores critically low, exhaustion rises
+     IF display_value("stores") < 20 THEN
+        war_exhaustion += 4
+        public_order   -= 3
+
+  6) Ensure mutual exclusivity (safety coherence):
+     - war_state tags: keep only one of {at_peace, at_war, truce, civil_war, holy_war} if present
+     - season tags: keep only one of {winter, campaign_season} if present
+     (Resolve by preferring the most “severe/active” tag mentioned most recently.)
+
+  7) Memory turn count increments:
+     W_next.memory.turn_count ← W_next.memory.turn_count + 1
+
+  RETURN W_next
+END
+
+
+FUNCTION compute_tension
+INPUT:
+  W   : WorldState
+OUTPUT:
+  tau : number [0,1]
+
+PROCESS:
+  // Tension increases when survival pillars are threatened.
+  // Compute in DISPLAY SPACE, then map to 0..1.
+
+  leg      ← display_value("legitimacy")       // 0..100
+  mil      ← display_value("military_strength")// 0..100
+  gold     ← display_value("treasury")         // 0..1200
+  food     ← display_value("stores")           // 0..100
+  order    ← display_value("public_order")     // 0..100
+  nobles   ← display_value("noble_loyalty")    // 0..100
+  weary    ← display_value("war_exhaustion")   // 0..100
+  intel    ← display_value("intel_clarity")    // 0..100
+
+  // Convert to risk signals (0 low risk, 1 high risk)
+  risk_leg    ← clamp((40 - leg) / 40, 0, 1)
+  risk_food   ← clamp((30 - food) / 30, 0, 1)
+  risk_order  ← clamp((35 - order) / 35, 0, 1)
+  risk_gold   ← clamp((160 - gold) / 160, 0, 1)
+  risk_mil    ← clamp((35 - mil) / 35, 0, 1)
+  risk_nobles ← clamp((40 - nobles) / 40, 0, 1)
+  risk_weary  ← clamp((weary - 55) / 45, 0, 1)
+  risk_intel  ← clamp((35 - intel) / 35, 0, 1)
+
+  base ← average([risk_leg,risk_food,risk_order,risk_gold,risk_mil,risk_nobles,risk_weary,risk_intel])
+
+  // Tag modifiers (categorical spikes)
+  tag_boost ← 0
+  IF "rebellion" IN tags THEN tag_boost += 0.12
+  IF "foreign_invasion" IN tags THEN tag_boost += 0.15
+  IF "under_siege" IN tags THEN tag_boost += 0.10
+  IF "plague" IN tags THEN tag_boost += 0.10
+  IF "famine" IN tags THEN tag_boost += 0.10
+  IF "succession_crisis" IN tags THEN tag_boost += 0.10
+  IF "council_divided" IN tags THEN tag_boost += 0.06
+
+  tau ← clamp(base + tag_boost, 0, 1)
+  RETURN tau
+END
+
+
+SECTION 10 — RENDER TEMPLATE (G implementation)
+───────────────────────────────────────────────────────────────────────────────
+RenderTemplate DominionRenderTemplate
+
+FUNCTION render
+INPUT:
+  W       : WorldState
+  Gamma   : GravityConfig
+  F       : NarrativeFrame
+  history : list<text>
+OUTPUT:
+  context : text
+
+PROCESS:
+  // Provide a substrate-facing "world HUD" + recent history + instruction focus.
+
+  1) Denormalize and present axes in display units with qualitative semantics.
+  2) Include active tags and current phase.
+  3) Include last 4–6 history lines and memory recap if present.
+  4) Close with "WHAT TO DO THIS TURN" instructions aligned to root frame.
+
+OUTPUT SHAPE (context segment):
+  == WORLD STATE ==
+  Legitimacy: 52/100 — doubted at the edges, obeyed in the capital
+  Military Strength: 60/100 — drilled enough to hold, not enough to dominate
+  Treasury: 360/1200 — coin exists, but not for prolonged war
+  Stores: 55/100 — stable rations, no surplus
+  Public Order: 58/100 — calm with grumbling
+  Noble Loyalty: 50/100 — oaths half-held, eyes watching
+  War Exhaustion: 26/100 — fresh enough to risk, scars remembered
+  Intel Clarity: 44/100 — rumors heavy, a few clean reports
+
+  Active Conditions: at_peace, border_skirmishes, council_divided
+  Current Phase: fractured_realms
+  Regime: feudal_realm
+
+  == NARRATIVE CONTEXT ==
+  Tone: grounded, gritty, strategic
+  Stakes: the survival and unification of your realm
+  Perspective: the sovereign in a war council
+
+  == RECENT EVENTS ==
+  (last 4–6 items from history)
+
+  == SUMMARY ==
+  (memory.recap if present)
+
+  == TURN REQUIREMENTS ==
+  - Produce [WAR_ROOM_UI], [BRIEFING], [CHOICES], then [STATE_UPDATE] exactly.
+
+RETURN joined text
+END
+
+
+SECTION 11 — OUTPUT PARSER (Δ extraction)
+───────────────────────────────────────────────────────────────────────────────
+OutputParser DominionOutputParser
+
+FUNCTION parse
+INPUT:
+  raw : text
+OUTPUT:
+  delta : Delta
+
+PROCESS:
+  delta ← Delta {
+    axis_changes : []
+    new_tags     : []
+    removed_tags : []
+    phase_change : null
+    entropy_hint : null
+    narrative    : raw
+  }
+
+  IF contains(raw, "[STATE_UPDATE]") THEN
+    block ← extract_between(raw, "[STATE_UPDATE]", "[/STATE_UPDATE]")
+
+    // Axis changes: id: +/-number  (DISPLAY-UNIT DELTAS)
+    axis_pattern ← regex("([a-zA-Z_]+)\\s*:\\s*([+-]?\\d*\\.?\\d+)")
+    FOR EACH match IN find_all(block, axis_pattern) DO
+      axis_id ← match[1]
+      val ← parse_number(match[2])
+      IF axis_id IN ["legitimacy","military_strength","treasury","stores","public_order","noble_loyalty","war_exhaustion","intel_clarity"] THEN
+        delta.axis_changes += [{ axis_id: axis_id, change: val }]
+
+    // Tags add/remove
+    IF contains(block, "+TAG:") THEN
+      tags_line ← extract_after(block, "+TAG:")
+      delta.new_tags ← split_by_commas(trim(tags_line))
+
+    IF contains(block, "-TAG:") THEN
+      tags_line ← extract_after(block, "-TAG:")
+      delta.removed_tags ← split_by_commas(trim(tags_line))
+
+    // Phase
+    IF contains(block, "PHASE:") THEN
+      delta.phase_change ← trim(extract_after(block, "PHASE:"))
+
+    // Narrative excludes the state block
+    delta.narrative ← extract_before(raw, "[STATE_UPDATE]")
+
+  RETURN delta
+END
+
+
+SECTION 12 — SUMMARIZATION (Σ) — Recommended Defaults
+───────────────────────────────────────────────────────────────────────────────
+SummarizationConfig DominionSummarization:
+  threshold        : 18
+  key_event_count  : 8
+  max_recap_length : 900
+  preserve_recent  : 4
+
+Guideline:
+- Key events should preserve: declarations of war, major battles, coronations,
+  famine/plague onset, rebellion start/end, siege outcomes, assassinations,
+  treaty terms, succession decisions.
+
+SECTION 13 — LIFECYCLE HOOKS (Optional)
+───────────────────────────────────────────────────────────────────────────────
+LifecycleHooks DominionHooks (reference):
+
+on_axis_critical:
+  - If legitimacy <= 20 → add tag "succession_crisis" (if not present)
+  - If public_order <= 25 → add tag "rebellion" OR "bandit_surge" (contextual)
+  - If stores <= 20 → add tag "famine" (if not present)
+  - If war_exhaustion >= 75 → add tag "desertions" (optional additional tag)
+
+on_phase_change:
+  - Log: "Phase shifted: old → new" into memory.key_events
+  - Encourage narrative frame override adherence
+
+SECTION 14 — SETTING / LORE (Metadata)
+───────────────────────────────────────────────────────────────────────────────
+World Title: "The Marches of Varr"
+Seat: "Blackstone Keep" (river-fort capital)
+Neighbor Powers (pressure sources):
+- The Pale League (merchant cities; money and sabotage)
+- House Veyl (rival claimant; legitimacy warfare)
+- The Ashen Covenant (clerics; moral leverage; can crown or condemn)
+- The Steppe Hosts (raiders; seasonal threat)
+
+Starting Truths:
+- The realm is stable but politically divided.
+- Borders bleed through skirmishes; war can ignite quickly.
+- Coin is enough to stabilize, not enough to brute-force.
+- Intel is unreliable; betrayal is plausible.
+
+END OF CONTEXT LAYER EXPORT — DOMINION: UNSHEATHED
