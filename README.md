@@ -1,3 +1,13 @@
+This is Callahan, Founder & CEO of Prairie Labs, Inc.
+
+Tinker is not being maintained. If the terminal is too much of a hassel, you can take the game files, paste them into your LLM of choice, and type "read X file and render the GUI in-text.
+
+If graphics don't load, be persistent with the "render in-text" part.
+
+Have fun!
+
+
+
 # Tinker
 
 A minimal terminal UI for running prompts against multiple AI APIs side by side. Built with Next.js.
